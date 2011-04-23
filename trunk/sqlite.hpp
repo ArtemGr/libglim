@@ -413,8 +413,8 @@ class SqliteQuery {
   /**
    * Bind an 64-bit integer to the query.
    */
-  SqliteQuery& bind (int index, long long int value) {
-    if (::sqlite3_bind_int (statement, index, value) != SQLITE_OK)
+  SqliteQuery& bind (int index, sqlite3_int64 value) {
+    if (::sqlite3_bind_int64 (statement, index, value) != SQLITE_OK)
       throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
