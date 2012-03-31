@@ -25,6 +25,7 @@ limitations under the License.
  */
 
 #include <stdexcept>
+#include <string>
 #include <sqlite3.h>
 #include <pthread.h>
 #include <string.h> // strerror
