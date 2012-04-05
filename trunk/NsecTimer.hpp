@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <string>
 #include <sstream>
-#include <iomanip>
 
 namespace glim {
 
@@ -19,19 +18,21 @@ struct NsecTimer {
     return (int64_t) (nsecStop.tv_sec - start.tv_sec) * 1000000000LL + (int64_t) (nsecStop.tv_nsec - start.tv_nsec);
   }
   //! Seconds since the creation or restart of the timer.
-  //! Formatted with `std::ios::fixed`.
-  std::string seconds () const {
-    double fv = operator()() / 1000000000.0;
+  std::string seconds (int precision = 9) const {
+    // The trick is to avoid the scientific notation by printing integers.
+    double sec = operator()() / 1000000000.0;
     std::ostringstream buf;
-    buf << std::setiosflags (std::ios::fixed) << fv;
-    return buf.str();
-  }
-  //! Seconds since the creation or restart of the timer.
-  std::string seconds (int precision) const {
-    int co1 = 1000000000; int co2 = 1; while (precision--) {co1 /= 10; co2 *= 10;}
-    double fv = (double) ((int) ((double) operator()() / co1)) / co2;
-    std::ostringstream buf;
-    buf << fv;
+    int isec = (int) sec;
+    buf << isec;
+
+    sec -= isec;
+    for (int pc = precision; pc; --pc) sec *= 10.0;
+    int ifrac = (int) sec;
+    if (ifrac > 0) {
+      buf << '.';
+      buf.fill ('0'); buf.width (precision);
+      buf << ifrac;
+    }
     return buf.str();
   }
   void restart() {clock_gettime (CLOCK_MONOTONIC, &start);}
