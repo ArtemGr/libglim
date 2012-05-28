@@ -2,12 +2,11 @@
 #define _GSTRING_INCLUDED
 
 #include <assert.h>
-#include <stdlib.h>
+#include <stdlib.h> // malloc, realloc, free
 #include <stdint.h>
-#include <string.h>
+#include <string.h> // memcpy
 #include <stdexcept>
 #include <iostream>
-#include <sstream>
 
 // Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
 #define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, true, sizeof (cstr) - 1)))
@@ -61,12 +60,11 @@ class gstring {
 public:
   void* _buf;
 public:
-  gstring(): _meta (0), _buf (NULL) {
-  }
+  gstring(): _meta (0), _buf (NULL) {}
   /**
    * Reuse `buf` of size `size`.
    * To fully use `buf` the `size` should be the power of two.
-   * @param size The size of the memory allocated to `buf`.
+   * @param bufSize The size of the memory allocated to `buf`.
    * @param buf The memory region to be reused.
    * @param free Whether the `buf` should be `free`d on resize or gstring destruction.
    * @param readOnly Whether the `buf` is read-only and should not be written to.
@@ -79,6 +77,16 @@ public:
             (power << CAPACITY_OFFSET) |
             (length & LENGTH_MASK);
     _buf = buf;
+  }
+
+  /** Copy the characters into `gstring`. */
+  gstring (const char* chars, size_t length) {
+    if (length != 0) {
+      _buf = ::malloc (length);
+      ::memcpy (_buf, chars, length);
+    }
+    _meta = (uint32_t) FREE_FLAG |
+            (length & LENGTH_MASK);
   }
 
   gstring (const gstring& gstr) {
@@ -127,6 +135,7 @@ public:
   uint32_t capacity() const {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
   uint32_t length() const {return _meta & LENGTH_MASK;}
   size_t size() const {return _meta & LENGTH_MASK;}
+  bool empty() const {return (_meta & LENGTH_MASK) == 0;}
   std::string str() const {return std::string ((const char*) _buf, size());}
   const char* c_str() {
     uint32_t len = length();
@@ -151,6 +160,12 @@ public:
     if (llen != olen) return false;
     return strncmp ((const char*) _buf, (const char*) gs._buf, llen) == 0;
   }
+
+  char& operator[] (unsigned index) {return ((char*)_buf)[index];}
+  const char& operator[] (unsigned index) const {return ((const char*)_buf)[index];}
+
+  /// Access `_buf` as `char*`. `_buf` might be NULL.
+  char* data() {return (char*)_buf;}
 
 protected:
   friend class gstring_stream;
@@ -201,22 +216,61 @@ public:
   gstring& operator << (long iv) {append64 (iv, sizeof (long) * 3); return *this;}
   gstring& operator << (long long iv) {append64 (iv, sizeof (long long) * 3); return *this;}
 
+  /// Append the characters to this `gstring` wrapping them in the netstring format.
+  gstring& appendNetstring (const char* cstr, uint32_t clen) {
+    *this << (int) clen; append (':'); append (cstr, clen); append (','); return *this;}
+  /// Append the `str` to this `gstring` wrapping it in the netstring format.
+  gstring& appendNetstring (const std::string& str) {return appendNetstring (str.data(), str.size());}
+
+  std::ostream& writeAsNetstring (std::ostream& stream) const;
+
+  /// Parse netstring at `pos` and return a `gstring` *pointing* at the parsed netstring.\n
+  /// No heap space allocated.\n
+  /// Throws std::runtime_error if netstring parsing fails.\n
+  /// If parsing was successfull, then `after` is set to point after the parsed netstring.
+  gstring netstringAt (uint32_t pos, uint32_t* after = NULL) const {
+    const uint32_t len = length(); char* buf = (char*) _buf;
+    if (buf == NULL) throw std::runtime_error ("gstring: netstringAt: NULL");
+    uint32_t next = pos;
+    while (next < len && buf[next] >= '0' && buf[next] <= '9') ++next;
+    if (next >= len || buf[next] != ':' || next - pos > 10) throw std::runtime_error ("gstring: netstringAt: no header");
+    char* endptr = 0;
+    long nlen = ::strtol (buf + pos, &endptr, 10);
+    if (endptr != buf + next) throw std::runtime_error ("gstring: netstringAt: unexpected header end");
+    pos = next + 1; next = pos + nlen;
+    if (next >= len || buf[next] != ',') throw std::runtime_error ("gstring: netstringAt: no body");
+    if (after) *after = next + 1;
+    return gstring (0, buf + pos, false, false, next - pos);
+  }
+
+  /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
+  long intAt (uint32_t pos, uint32_t* after = NULL, int base = 10) const {
+    const uint32_t len = length(); char* buf = (char*) _buf;
+    if (pos >= len || buf == NULL) throw std::runtime_error ("gstring: intAt: pos >= len");
+    char* endptr = 0;
+    long lv = ::strtol (buf + pos, &endptr, base);
+    uint32_t next = endptr - buf;
+    if (next >= len) throw std::runtime_error ("gstring: intAt: endptr >= len");
+    if (after) *after = next;
+    return lv;
+  }
+
   /// Get a single netstring from the `stream` and append it to the end of `gstring`.
   /// Throws an exception if the input is not a well-formed netstring.
-  gstring& appendNetstring (std::istringstream& stream) {
+  gstring& readNetstring (std::istream& stream) {
     int32_t nlen; stream >> nlen;
-    if (nlen <= 0) throw std::runtime_error ("!netstring");
+    if (!stream.good() || nlen < 0) throw std::runtime_error ("!netstring");
     int ch = stream.get();
-    if (ch != ':') throw std::runtime_error ("!netstring");
+    if (!stream.good() || ch != ':') throw std::runtime_error ("!netstring");
     uint32_t glen = length();
     while (capacity() < glen + nlen) grow();
     stream.read ((char*) _buf + glen, nlen);
+    if (!stream.good()) throw std::runtime_error ("!netstring");
     ch = stream.get();
     if (ch != ',') throw std::runtime_error ("!netstring");
     setLength (glen + nlen);
     return *this;
   }
-  std::ostream& netstring (std::ostream& stream) const;
 
   /// Set length to 0. `_buf` not changed.
   gstring& clear() {setLength (0); return *this;}
@@ -238,7 +292,7 @@ inline std::ostream& operator << (std::ostream& os, const gstring& gstr) {
 }
 
 /// Encode this `gstring` into `stream` as a netstring.
-inline std::ostream& gstring::netstring (std::ostream& stream) const {
+inline std::ostream& gstring::writeAsNetstring (std::ostream& stream) const {
   stream << length() << ':' << *this << ',';
   return stream;
 }
