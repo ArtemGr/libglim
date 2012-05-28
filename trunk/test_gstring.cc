@@ -6,6 +6,7 @@ using glim::gstring;
 #include <iostream>
 #include <string>
 #include <stdexcept>
+#include <sstream>
 
 int main () {
   std::cout << "Testing gstring.hpp ... " << std::flush;
@@ -54,9 +55,20 @@ int main () {
   gstring gsb; std::string str ("abc");
   gsb << 'a' << 1 << 2LL << str;
   std::string ns ("1:3,"); std::istringstream nsi (ns);
-  gsb.appendNetstring (nsi);
+  gsb.readNetstring (nsi);
   if (gsb != "a12abc3") throw std::runtime_error ("gsb != a12abc3");
   if (strcmp (gsb.c_str(), "a12abc3") != 0) throw std::runtime_error ("strcmp ! 0");
+
+  gsb.clear().appendNetstring ("foo") .appendNetstring ("bar");
+  if (gsb != "3:foo,3:bar,") throw std::runtime_error ("gsb != 3:foo,3:bar,");
+  uint32_t pos = 0;
+  if (gsb.netstringAt (pos, &pos) != "foo" || gsb.netstringAt (pos, &pos) != "bar" || pos != gsb.length())
+    throw std::runtime_error ("gsb !netstringAt");
+
+  gs32.clear() << 12345 << ',';
+  if (gs32.intAt (0, &pos) != 12345 || pos != 5) throw std::runtime_error ("gsb !12345");
+  if (gs32.intAt (1, &pos) != 2345 || pos != 5) throw std::runtime_error ("gsb !2345");
+  if (gs32.intAt (5, &pos) != 0 || pos != 5) throw std::runtime_error ("gsb !0");
 
   std::cout << "pass." << std::endl;
   return 0;
