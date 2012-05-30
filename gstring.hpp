@@ -166,6 +166,7 @@ public:
 
   /// Access `_buf` as `char*`. `_buf` might be NULL.
   char* data() {return (char*)_buf;}
+  const char* data() const {return (const char*)_buf;}
 
 protected:
   friend class gstring_stream;
