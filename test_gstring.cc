@@ -7,6 +7,7 @@ using glim::gstring;
 #include <string>
 #include <stdexcept>
 #include <sstream>
+#include <unordered_map>
 
 int main () {
   std::cout << "Testing gstring.hpp ... " << std::flush;
@@ -24,10 +25,10 @@ int main () {
   if (gsFree.isReadOnly()) throw std::runtime_error ("isReadOnly");
   if (gsFree.capacity() != 16) throw std::runtime_error ("gsFree capacity != 16");
   if (gsFree.size() != 0) throw std::runtime_error ("gsFree size != 0");
-  gstring gsRO (31, NULL, false, true, 0);
+  gstring gsRO (0, NULL, false, true, 0);
   if (gsRO.needsFreeing()) throw std::runtime_error ("needsFreeing");
   if (!gsRO.isReadOnly()) throw std::runtime_error ("!isReadOnly");
-  if (gsRO.capacity() != 16) throw std::runtime_error ("gsRO capacity != 16");
+  if (gsRO.capacity() != 1) throw std::runtime_error ("gsRO capacity != 1");
   if (gsRO.size() != 0) throw std::runtime_error ("gsRO size != 0");
   char buf32[32];
   gstring gs32 (sizeof (buf32), buf32, false, false, 0);
@@ -69,6 +70,14 @@ int main () {
   if (gs32.intAt (0, &pos) != 12345 || pos != 5) throw std::runtime_error ("gsb !12345");
   if (gs32.intAt (1, &pos) != 2345 || pos != 5) throw std::runtime_error ("gsb !2345");
   if (gs32.intAt (5, &pos) != 0 || pos != 5) throw std::runtime_error ("gsb !0");
+
+  std::unordered_map<glim::gstring, int> map;
+  map[glim::gstring ("foo")] = 1;
+  glim::gstring bar ("bar");
+  map[bar] = 1;
+  map[glim::gstring ("sum")] = map[glim::gstring ("foo")] + map[glim::gstring ("bar")];
+  if (map[glim::gstring ("sum")] != 2) throw std::runtime_error ("sum != 2");
+  map.clear();
 
   std::cout << "pass." << std::endl;
   return 0;
