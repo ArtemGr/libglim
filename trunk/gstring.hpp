@@ -71,12 +71,24 @@ public:
    * @param length String length inside the `buf`.
    */
   explicit gstring (uint32_t bufSize, void* buf, bool free, bool readOnly, uint32_t length) {
+    assert (!readOnly || bufSize == 0); // Read-only buffers must always grow.
     uint32_t power = 0; while (((uint32_t) 1 << (power + 1)) <= bufSize) ++power;
     _meta = ((uint32_t) free << FREE_OFFSET) |
             ((uint32_t) readOnly << RO_OFFSET) |
             (power << CAPACITY_OFFSET) |
             (length & LENGTH_MASK);
     _buf = buf;
+  }
+
+  /** Copy the characters into `gstring`. */
+  gstring (const char* chars): _meta (0), _buf (NULL) {
+    if (chars && *chars) {
+      size_t length = ::strlen (chars);
+      _buf = ::malloc (length);
+      ::memcpy (_buf, chars, length);
+      _meta = (uint32_t) FREE_FLAG |
+              (length & LENGTH_MASK);
+    }
   }
 
   /** Copy the characters into `gstring`. */
@@ -170,10 +182,9 @@ public:
 
 protected:
   friend class gstring_stream;
-  void grow() {
-    uint32_t len = length();
+  void grow (uint32_t to) {
     uint32_t power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
-    do {++power;} while (((uint32_t) 1 << power) < len);
+    while (((uint32_t) 1 << power) < to) ++power;
     _meta = (_meta & ~CAPACITY_MASK) | (power << CAPACITY_OFFSET);
     if (needsFreeing()) {
       _buf = ::realloc (_buf, capacity());
@@ -190,23 +201,23 @@ protected:
     _meta = (_meta & ~LENGTH_MASK) | (len & LENGTH_MASK);
   }
   void append64 (int64_t iv, int bytes = 24) {
-    if (isReadOnly()) throw std::runtime_error ("gstring is read-only");
     uint32_t pos = length();
-    while (capacity() < pos + bytes) grow();
+    if (capacity() < pos + bytes) grow (pos + bytes);
     setLength (itoa ((char*) _buf + pos, iv, 10) - (char*) _buf);
   }
 public:
   void append (char ch) {
-    if (isReadOnly()) throw std::runtime_error ("gstring is read-only");
     uint32_t pos = length();
-    if (pos >= capacity() || _buf == NULL) grow();
+    const uint32_t cap = capacity();
+    if (pos >= cap || cap <= 1) grow (pos + 1);
     ((char*)_buf)[pos] = ch;
     setLength (++pos);
   }
   void append (const char* cstr, uint32_t clen) {
     uint32_t len = length();
     uint32_t need = len + clen;
-    while (need > capacity()) grow();
+    const uint32_t cap = capacity();
+    if (need > cap || cap <= 1) grow (need);
     ::memcpy ((char*) _buf + len, cstr, clen);
     setLength (need);
   }
@@ -264,7 +275,8 @@ public:
     int ch = stream.get();
     if (!stream.good() || ch != ':') throw std::runtime_error ("!netstring");
     uint32_t glen = length();
-    while (capacity() < glen + nlen) grow();
+    const uint32_t cap = capacity();
+    if (cap < glen + nlen || cap <= 1) grow (glen + nlen);
     stream.read ((char*) _buf + glen, nlen);
     if (!stream.good()) throw std::runtime_error ("!netstring");
     ch = stream.get();
@@ -281,6 +293,7 @@ public:
   }
 };
 
+inline bool operator == (const gstring& gs1, const gstring& gs2) {return gs1.equals (gs2);}
 inline bool operator == (const char* cstr, const gstring& gstr) {return gstr.equals (cstr);}
 inline bool operator == (const gstring& gstr, const char* cstr) {return gstr.equals (cstr);}
 inline bool operator != (const gstring& gs1, const gstring& gs2) {return !gs1.equals (gs2);}
@@ -319,5 +332,23 @@ protected:
 };
 
 } // namespace glim
+
+// hash specialization
+// cf. http://stackoverflow.com/questions/8157937/how-to-specialize-stdhashkeyoperator-for-user-defined-type-in-unordered
+namespace std {
+  template <> struct hash<glim::gstring> {
+    size_t operator()(const glim::gstring& gs) const {
+      // cf. http://stackoverflow.com/questions/7666509/hash-function-for-string
+      uint32_t hash = 5381;
+      uint32_t len = gs.length();
+      if (len) {
+        const char* str = (const char*) gs._buf;
+        const char* end = str + len;
+        while (str < end) hash = ((hash << 5) + hash) + *str++; /* hash * 33 + c */
+      }
+      return hash;
+    }
+  };
+}
 
 #endif // _GSTRING_INCLUDED
