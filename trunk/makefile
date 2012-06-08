@@ -1,7 +1,7 @@
 
 PREFIX = /usr/local
 INSTALL2 = ${PREFIX}/include/glim
-CXXFLAGS = -std=c++0x -Wall -Ofast -ggdb
+CXXFLAGS = -std=c++0x -Wall -O2 -ggdb
 
 all: test
 
