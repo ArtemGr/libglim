@@ -101,6 +101,16 @@ public:
             (length & LENGTH_MASK);
   }
 
+  /** Copy into `gstring`. */
+  gstring (const std::string& str): _meta (0), _buf (NULL) {
+    if (!str.empty()) {
+      _buf = ::malloc (str.length());
+      ::memcpy (_buf, str.data(), str.length());
+      _meta = (uint32_t) FREE_FLAG |
+              (str.length() & LENGTH_MASK);
+    }
+  }
+
   gstring (const gstring& gstr) {
     uint32_t glen = gstr.length();
     if (glen != 0) {
@@ -231,8 +241,8 @@ public:
   /// Append the characters to this `gstring` wrapping them in the netstring format.
   gstring& appendNetstring (const char* cstr, uint32_t clen) {
     *this << (int) clen; append (':'); append (cstr, clen); append (','); return *this;}
-  /// Append the `str` to this `gstring` wrapping it in the netstring format.
-  gstring& appendNetstring (const std::string& str) {return appendNetstring (str.data(), str.size());}
+  /// Append the `gstr` wrapping it in the netstring format.
+  gstring& appendNetstring (const gstring& gstr) {return appendNetstring (gstr.data(), gstr.length());}
 
   std::ostream& writeAsNetstring (std::ostream& stream) const;
 
