@@ -298,6 +298,20 @@ public:
   /// Set length to 0. `_buf` not changed.
   gstring& clear() {setLength (0); return *this;}
 
+  /// Removes `count` characters starting at `pos`.
+  gstring& erase (uint32_t pos, uint32_t count = 1) {
+    const char* buf = (const char*) _buf;
+    const char* pt1 = buf + pos;
+    const char* pt2 = pt1 + count;
+    uint32_t len = length();
+    const char* end = buf + len;
+    if (pt2 <= end) {
+      setLength (len - count);
+      ::memmove ((void*) pt1, (void*) pt2, end - pt2);
+    }
+    return *this;
+  }
+
   ~gstring() {
     if (_buf != NULL && needsFreeing()) {::free (_buf); _buf = NULL;}
   }

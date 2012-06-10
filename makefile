@@ -65,3 +65,4 @@ uninstall:
 clean:
 	rm -rf bin/*
 	rm -f /tmp/libglim_test_*
+	rm -f *.exe.stackdump

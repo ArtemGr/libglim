@@ -71,6 +71,10 @@ int main () {
   if (gs32.intAt (1, &pos) != 2345 || pos != 5) throw std::runtime_error ("gsb !2345");
   if (gs32.intAt (5, &pos) != 0 || pos != 5) throw std::runtime_error ("gsb !0");
 
+  if ((gs32.clear() << 123).erase (0) != "23") throw std::runtime_error ("!23");
+  if ((gs32.clear() << 123).erase (1) != "13") throw std::runtime_error ("!13");
+  if ((gs32.clear() << 123).erase (2) != "12") throw std::runtime_error ("!12");
+
   std::unordered_map<glim::gstring, int> map;
   map[glim::gstring ("foo")] = 1;
   glim::gstring bar ("bar");
