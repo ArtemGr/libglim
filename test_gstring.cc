@@ -83,6 +83,11 @@ int main () {
   if (map[glim::gstring ("sum")] != 2) throw std::runtime_error ("sum != 2");
   map.clear();
 
+  gstring gs1 ("foo"); gstring gs2 ("bar");
+  gs1 = gstring (gs2 << "_"); // Copying in order to malloc length() bytes.
+  if (gs1 != "bar_") throw std::runtime_error ("!bar_");
+  if (gs1.capacity() != 1) throw std::runtime_error ("bar_ != 4");
+
   std::cout << "pass." << std::endl;
   return 0;
 }

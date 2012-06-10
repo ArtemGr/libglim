@@ -115,10 +115,13 @@ public:
     uint32_t glen = gstr.length();
     if (glen != 0) {
       _buf = ::malloc (glen);
+      if (!_buf) throw std::runtime_error ("!malloc");
       ::memcpy (_buf, gstr._buf, glen);
+      _meta = (uint32_t) FREE_FLAG |
+              (glen & LENGTH_MASK);
+    } else {
+      _meta = 0; _buf = NULL;
     }
-    _meta = (uint32_t) FREE_FLAG |
-            (glen & LENGTH_MASK);
   }
   gstring (gstring&& gstr): _meta (gstr._meta), _buf (gstr._buf) {
     gstr._meta = 0; gstr._buf = NULL;
@@ -231,6 +234,7 @@ public:
     ::memcpy ((char*) _buf + len, cstr, clen);
     setLength (need);
   }
+  gstring& operator << (const gstring& gs) {append (gs.data(), gs.length()); return *this;}
   gstring& operator << (const std::string& str) {append (str.data(), str.length()); return *this;}
   gstring& operator << (const char* cstr) {append (cstr, ::strlen (cstr)); return *this;}
   gstring& operator << (char ch) {append (ch); return *this;}
