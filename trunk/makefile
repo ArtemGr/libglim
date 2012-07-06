@@ -48,6 +48,7 @@ install:
 	cp TscTimer.hpp ${INSTALL2}/
 	cp memcache.hpp ${INSTALL2}/
 	cp gstring.hpp ${INSTALL2}/
+	cp runner.hpp ${INSTALL2}/
 
 install_couchbase:
 	mkdir -p bin
