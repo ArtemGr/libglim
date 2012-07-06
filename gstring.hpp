@@ -242,6 +242,14 @@ public:
   gstring& operator << (long iv) {append64 (iv, sizeof (long) * 3); return *this;}
   gstring& operator << (long long iv) {append64 (iv, sizeof (long long) * 3); return *this;}
 
+  bool operator < (const gstring &gs) const {
+    uint32_t len1 = length(); uint32_t len2 = gs.length();
+    if (len1 == len2) return ::strncmp (data(), gs.data(), len1) < 0;
+    int cmp = ::strncmp (data(), gs.data(), std::min (len1, len2));
+    if (cmp) return cmp < 0;
+    return len1 < len2;
+  }
+
   /// Append the characters to this `gstring` wrapping them in the netstring format.
   gstring& appendNetstring (const char* cstr, uint32_t clen) {
     *this << (int) clen; append (':'); append (cstr, clen); append (','); return *this;}
