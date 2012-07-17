@@ -10,7 +10,7 @@
 
 namespace glim {
 
-/// Uses a separate thread to run CURLM requests and completion handlers, as well as other periodic jobs.
+/** Uses a separate thread to run CURLM requests and completion handlers, as well as other periodic jobs. */
 class Runner {
   struct FreeCurl { ///< Free CURL during stack unwinding.
     Runner* runner; CURL* curl;
@@ -23,15 +23,21 @@ class Runner {
   };
 protected:
   typedef std::function<void(CURLMsg*)> handler_t;
-  std::mutex _workMutex; ///< Locked when the thread isn't sleeping/waiting.
+  /** Locked when the thread isn't sleeping/waiting. */
+  std::mutex _workMutex;
   std::map<CURL*, handler_t> _handlers;
-  std::map<glim::gstring, std::function<void()>> _jobs; ///< Functions to run periodically.
+  /** Functions to run periodically. */
+  std::map<glim::gstring, std::function<void()>> _jobs;
   CURLM* _curlm = curl_multi_init();
-  int _running_handles = 0; ///< CURL's number of handlers waiting to be processed.
-  bool* _active = new bool (true); ///< `false` tells the thread that Scheduler is destructed.
+  /** CURL's number of handlers waiting to be processed. */
+  int _running_handles = 0;
+  /** `false` tells the thread that Scheduler is destructed. */
+  bool* _active = new bool (true);
   std::thread _thread;
-  std::mutex _alarmMutex; ///< Conditional variables require protection.
-  std::condition_variable _alarm; ///< Rings when there is a new handler.
+  /** Conditional variables require protection. */
+  std::mutex _alarmMutex;
+  /** Rings when there is a new handler. */
+  std::condition_variable _alarm;
   static void staticRun (Runner* scheduler) {scheduler->run();}
   void run() {
     bool* schedulerIsNotDestroyed = _active; // The pointer is valid even after Scheduler destruction.
@@ -86,7 +92,7 @@ protected:
 public:
   unsigned _pauseMs = 100;
   Runner(): _thread (Runner::staticRun, this) {}
-  /// Wait for the operation to complete, then call the `handler`, then free the `curl`.
+  /** Wait for the operation to complete, then call the `handler`, then free the `curl`. */
   void multi (CURL* curl, handler_t handler) {
     std::unique_lock<std::mutex> workLock (_workMutex);
     curl_multi_add_handle (_curlm, curl);
@@ -95,7 +101,7 @@ public:
     std::unique_lock<std::mutex> alarmLock (_alarmMutex); // NB: Must be locked here or the alarm won't work.
     _alarm.notify_all();
   }
-  /// Register a new job to be run on the thread loop.
+  /** Register a new job to be run on the thread loop. */
   std::function<void()>& job (const glim::gstring& name) {
     std::unique_lock<std::mutex> workLock (_workMutex);
     return _jobs[name];
