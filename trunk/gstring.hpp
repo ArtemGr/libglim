@@ -9,7 +9,7 @@
 #include <iostream>
 
 // Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
-#define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, true, sizeof (cstr) - 1)))
+#define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, sizeof (cstr) - 1)))
 
 namespace glim {
 
@@ -50,8 +50,8 @@ class gstring {
   enum Flags {
     FREE_FLAG = 0x80000000, // 1st bit; `_buf` needs `free`ing
     FREE_OFFSET = 31,
-    RO_FLAG = 0x40000000, // 2nd bit; `_buf` is read-only
-    RO_OFFSET = 30,
+    //RO_FLAG = 0x40000000, // 2nd bit; `_buf` is read-only
+    //RO_OFFSET = 30,
     CAPACITY_MASK = 0x3F000000, // 3..8 bits; `_buf` size is 2^this
     CAPACITY_OFFSET = 24,
     LENGTH_MASK = 0x00FFFFFF, // 9th bit; allocated capacity
@@ -70,11 +70,9 @@ public:
    * @param readOnly Whether the `buf` is read-only and should not be written to.
    * @param length String length inside the `buf`.
    */
-  explicit gstring (uint32_t bufSize, void* buf, bool free, bool readOnly, uint32_t length) {
-    assert (!readOnly || bufSize == 0); // Read-only buffers must always grow.
+  explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length) {
     uint32_t power = 0; while (((uint32_t) 1 << (power + 1)) <= bufSize) ++power;
     _meta = ((uint32_t) free << FREE_OFFSET) |
-            ((uint32_t) readOnly << RO_OFFSET) |
             (power << CAPACITY_OFFSET) |
             (length & LENGTH_MASK);
     _buf = buf;
@@ -131,7 +129,7 @@ public:
     if (this != &gstr) {
       uint32_t glen = gstr.length();
       uint32_t power = 0;
-      if (glen <= capacity() && !isReadOnly()) {
+      if (glen <= capacity()) {
         // We reuse existing buffer. Keep capacity info.
         power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
       } else {
@@ -155,7 +153,6 @@ public:
   }
 
   bool needsFreeing() const {return _meta & FREE_FLAG;}
-  bool isReadOnly() const {return _meta & RO_FLAG;}
   /** Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated. */
   uint32_t capacity() const {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
   uint32_t length() const {return _meta & LENGTH_MASK;}
@@ -167,7 +164,7 @@ public:
     if (len == 0) return "";
     uint32_t cap = capacity();
     const char* buf = (const char*) _buf;
-    if ((isReadOnly() || len < cap) && buf[len] == 0) return buf;
+    if (len < cap && buf[len] == 0) return buf;
     append (0);
     setLength (len);
     return (const char*) _buf;
@@ -193,11 +190,25 @@ public:
   char* data() {return (char*)_buf;}
   const char* data() const {return (const char*)_buf;}
 
+  char* end() {return (char*)_buf + length();}
+  const char* end() const {return (const char*)_buf + length();}
+
+  gstring view (uint32_t pos, int32_t count = -1) {
+    return gstring (0, data() + pos, false, count - pos);}
+  const gstring view (uint32_t pos, int32_t count = -1) const {
+    return gstring (0, (void*)(data() + pos), false, count - pos);}
+
 protected:
   friend class gstring_stream;
   void grow (uint32_t to) {
     uint32_t power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
-    while (((uint32_t) 1 << power) < to) ++power;
+    if (((uint32_t) 1 << power) < to) {
+      ++power;
+      while (((uint32_t) 1 << power) < to) ++power;
+    } else if (power) {
+      // No need to grow.
+      return;
+    }
     _meta = (_meta & ~CAPACITY_MASK) | (power << CAPACITY_OFFSET);
     if (needsFreeing()) {
       _buf = ::realloc (_buf, capacity());
@@ -274,7 +285,7 @@ public:
     pos = next + 1; next = pos + nlen;
     if (next >= len || buf[next] != ',') throw std::runtime_error ("gstring: netstringAt: no body");
     if (after) *after = next + 1;
-    return gstring (0, buf + pos, false, false, next - pos);
+    return gstring (0, buf + pos, false, next - pos);
   }
 
   /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
