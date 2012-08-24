@@ -190,8 +190,8 @@ public:
   char* data() {return (char*)_buf;}
   const char* data() const {return (const char*)_buf;}
 
-  char* end() {return (char*)_buf + length();}
-  const char* end() const {return (const char*)_buf + length();}
+  char* endp() {return (char*)_buf + length();}
+  const char* endp() const {return (const char*)_buf + length();}
 
   gstring view (uint32_t pos, int32_t count = -1) {
     return gstring (0, data() + pos, false, count - pos);}
