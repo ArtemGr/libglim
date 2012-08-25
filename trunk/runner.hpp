@@ -12,7 +12,8 @@ namespace glim {
 
 /** Uses a separate thread to run CURLM requests and completion handlers, as well as other periodic jobs. */
 class Runner {
-  struct FreeCurl { ///< Free CURL during stack unwinding.
+  /** Free CURL during stack unwinding. */
+  struct FreeCurl {
     Runner* runner; CURL* curl;
     FreeCurl (Runner* scheduler, CURL* curl): runner (scheduler), curl (curl) {}
     ~FreeCurl() {
@@ -113,6 +114,7 @@ public:
   ~Runner() {
     *_active = false;
     _alarm.notify_all();
+    _thread.join(); // Wait for the thread to finish before proceeding with the destruction.
     std::unique_lock<std::mutex> lock (_workMutex);
     for (auto it = _handlers.begin(), end = _handlers.end(); it != end; ++it) {
       CURL* curl = it->first;
