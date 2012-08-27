@@ -378,6 +378,28 @@ protected:
   gstring_stream& operator = (const gstring_stream &);
 };
 
+#ifdef GSTRING_CPPA
+class gstring_info: public cppa::util::abstract_uniform_type_info<gstring> {
+ protected:
+  void serialize (const void* ptr, cppa::serializer* sink) const {
+    gstring* gs = (gstring*) ptr;
+    sink->begin_object (name());
+    sink->write_value (gs->length());
+    sink->write_raw (gs->size(), gs->data());
+    sink->end_object();
+  }
+  void deserialize (void* ptr, cppa::deserializer* source) const {
+    const std::string& cname = source->seek_object();
+    if (cname != name()) throw std::logic_error ("wrong type name found");
+    gstring* gs = (gstring*) ptr;
+    uint32_t size = cppa::get<uint32_t> (source->read_value (cppa::pt_uint32));
+    char buf[size]; source->read_raw (size, buf);
+    gs->append (buf, size);
+    source->end_object();
+  }
+};
+#endif
+
 } // namespace glim
 
 // hash specialization
