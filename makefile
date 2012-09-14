@@ -17,15 +17,8 @@ bin/test_sqlite: test_sqlite.cc
 	mkdir -p bin
 	g++ $(CXXFLAGS) test_sqlite.cc -o bin/test_sqlite -lsqlite3
 
-test_couchbase: bin/test_couchbase
-	cp bin/test_couchbase /tmp/libglim_test_couchbase && chmod +x /tmp/libglim_test_couchbase && /tmp/libglim_test_couchbase && rm -f /tmp/libglim_test_couchbase
-
 test_memcache: bin/test_memcache
 	cp bin/test_memcache /tmp/libglim_test_memcache && chmod +x /tmp/libglim_test_memcache && /tmp/libglim_test_memcache && rm -f /tmp/libglim_test_memcache
-
-bin/test_couchbase: test_couchbase.cc couchbase.hpp couchbase.cpp
-	mkdir -p bin
-	g++ $(CXXFLAGS) test_couchbase.cc -o bin/test_couchbase -lcouchbase
 
 bin/test_memcache: test_memcache.cc memcache.hpp
 	mkdir -p bin
@@ -49,19 +42,10 @@ install:
 	cp memcache.hpp ${INSTALL2}/
 	cp gstring.hpp ${INSTALL2}/
 	cp runner.hpp ${INSTALL2}/
-
-install_couchbase:
-	mkdir -p bin
-	g++ $(CXXFLAGS) -fpic -shared -o bin/libglimcouchbase.so couchbase.cpp -lcouchbase
-	rm -f /usr/local/lib/libglimcouchbase.so
-	cp bin/libglimcouchbase.so /usr/local/lib/
-	ldconfig
-	cp couchbase.hpp ${INSTALL2}/
+	cp hget.hpp ${INSTALL2}/
 
 uninstall:
-	rm -f ${INSTALL2}/sqlite.hpp
-	rm -f ${INSTALL2}/NsecTimer.hpp
-	rm -f ${INSTALL2}/TscTimer.hpp
+	rm -rf ${INSTALL2}
 
 clean:
 	rm -rf bin/*

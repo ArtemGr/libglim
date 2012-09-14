@@ -1,5 +1,5 @@
-#ifndef _RUNNER_INCLUDED
-#define _RUNNER_INCLUDED
+#ifndef _GLIM_RUNNER_INCLUDED
+#define _GLIM_RUNNER_INCLUDED
 
 #include <functional>
 #include <mutex>
@@ -7,6 +7,7 @@
 #include <chrono>
 #include <map>
 #include <stdexcept>
+#include <memory>
 
 #include <curl/curl.h>
 #include <event2/event.h>
@@ -30,10 +31,8 @@ class Runner {
 protected:
   typedef std::function<void(CURLMsg*)> handler_t;
   typedef std::function<void()> job_t;
-  /** Returns an event_base instance or NULL if the event_base is no longer available (e.g. when terminating). */
-  typedef std::function<struct event_base*()> evbase_provider_t;
   typedef std::function<void(const char* error)> errlog_t;
-  evbase_provider_t _evbase;
+  std::shared_ptr<struct event_base> _evbase;
   errlog_t _errlog;
   std::mutex _mutex;
   std::map<CURL*, handler_t> _handlers;
@@ -77,13 +76,10 @@ protected:
     ((Runner*) rpt)->run();
   };
 public:
-  Runner (evbase_provider_t evbase, errlog_t errlog): _evbase (evbase), _errlog (errlog) {
+  Runner (std::shared_ptr<struct event_base> evbase, errlog_t errlog): _evbase (evbase), _errlog (errlog) {
     _curlm = curl_multi_init();
-    struct event_base* evb = _evbase();
-    if (evb == NULL) _errlog ("glim::Runner(): no evbase"); else {
-      _timer = evtimer_new (evb, timerCB, this);
-      restartTimer();
-    }
+    _timer = evtimer_new (evbase.get(), timerCB, this);
+    restartTimer();
   }
   ~Runner() {
     std::unique_lock<std::mutex> lock (_mutex);
@@ -127,4 +123,4 @@ public:
 
 } // namespace glim
 
-#endif // _RUNNER_INCLUDED
+#endif // _GLIM_RUNNER_INCLUDED
