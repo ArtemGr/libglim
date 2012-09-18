@@ -46,25 +46,24 @@ class Curl {
   CURL* _curl;
   struct curl_slist *_headers;
   gstring* _send;
+  gstring _localSend;
   uint32_t _sent;
   gstring _got;
-  char errorBuf[CURL_ERROR_SIZE];
+  char _errorBuf[CURL_ERROR_SIZE];
 
-  Curl(): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0) {*errorBuf = 0;}
+  Curl(): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0) {*_errorBuf = 0;}
   /** Tries to reuse the given character buffer. */
   Curl (size_t bufSize, char* buf): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0),
-    _got (bufSize, buf, false, 0) {*errorBuf = 0;}
+    _got (bufSize, buf, false, 0) {*_errorBuf = 0;}
   /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless). */
-  Curl (CURL* curl): _curl (curl), _headers (NULL), _send (NULL), _sent (0) {*errorBuf = 0;}
+  Curl (CURL* curl): _curl (curl), _headers (NULL), _send (NULL), _sent (0) {*_errorBuf = 0;}
   ~Curl(){
     if (_headers) {curl_slist_free_all (_headers); _headers = NULL;}
     if (_curl) {curl_easy_cleanup (_curl); _curl = NULL;}
   }
 
-  Curl& send (gstring* text) {
-    _send = text; _sent = 0;
-    return *this;
-  }
+  Curl& send (gstring* text) {_send = text; _sent = 0; return *this;}
+  Curl& send (const gstring& text) {_localSend = text; _send = &_localSend; _sent = 0; return *this;}
 
   Curl& contentType (const char* ct) {
     char ctb[64]; gstring cth (sizeof (ctb), ctb, false, 0);
@@ -80,7 +79,7 @@ class Curl {
     curl_easy_setopt (_curl, CURLOPT_TIMEOUT, timeout);
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
-    curl_easy_setopt (_curl, CURLOPT_ERRORBUFFER, errorBuf);
+    curl_easy_setopt (_curl, CURLOPT_ERRORBUFFER, _errorBuf);
     if (_send && !_send->empty()) {
       curl_easy_setopt (_curl, CURLOPT_UPLOAD, 1L); // http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTUPLOAD
       curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _send->size());
@@ -92,8 +91,8 @@ class Curl {
   }
 
   Curl& go() {
-    *errorBuf = 0;
-    if (curl_easy_perform (_curl)) throw PerformError (errorBuf);
+    *_errorBuf = 0;
+    if (curl_easy_perform (_curl)) throw PerformError (_errorBuf);
     return *this;
   }
 
@@ -120,7 +119,8 @@ inline size_t curlReadFromGstring (void *ptr, size_t size, size_t nmemb, void *u
  * Example:
  *   std::string w3 = glim::curl2str ("http://www.w3.org/");
  */
-inline std::string curl2str (const char* url) {return glim::Curl().http (url) .go().str();}
+inline std::string curl2str (const char* url, int timeout = 20) {
+  return glim::Curl().http (url, timeout) .go().str();}
 
 }
 
