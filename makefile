@@ -43,6 +43,7 @@ install:
 	cp gstring.hpp ${INSTALL2}/
 	cp runner.hpp ${INSTALL2}/
 	cp hget.hpp ${INSTALL2}/
+	cp curl.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
