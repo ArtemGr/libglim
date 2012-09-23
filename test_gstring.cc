@@ -9,6 +9,10 @@ using glim::gstring;
 #include <sstream>
 #include <unordered_map>
 
+#include <boost/algorithm/string/predicate.hpp>
+
+static void testIterators();
+
 int main () {
   std::cout << "Testing gstring.hpp ... " << std::flush;
 
@@ -84,6 +88,15 @@ int main () {
   if (gs1 != "bar_") throw std::runtime_error ("!bar_");
   if (gs1.capacity() != 1) throw std::runtime_error ("bar_ != 4");
 
+  testIterators();
+
   std::cout << "pass." << std::endl;
   return 0;
+}
+
+static void testIterators() {
+  gstring foo (C2GSTRING ("foo"));
+  gstring buf; for (auto it = foo.begin(), end = foo.end(); it != end; ++it) buf << *it;
+  assert (buf == "foo");
+  assert (boost::starts_with (foo, "f") && boost::ends_with (foo, "oo"));
 }

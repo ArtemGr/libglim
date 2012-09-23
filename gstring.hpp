@@ -7,6 +7,7 @@
 #include <string.h> // memcpy
 #include <stdexcept>
 #include <iostream>
+#include <iterator>
 
 // Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
 #define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, sizeof (cstr) - 1)))
@@ -197,6 +198,47 @@ public:
     return gstring (0, data() + pos, false, count - pos);}
   const gstring view (uint32_t pos, int32_t count = -1) const {
     return gstring (0, (void*)(data() + pos), false, count - pos);}
+
+  // http://en.cppreference.com/w/cpp/concept/Iterator
+  template<typename CT> struct iterator_t: public std::iterator<std::random_access_iterator_tag, CT, int32_t> {
+    CT* _ptr;
+    iterator_t (): _ptr (NULL) {}
+    iterator_t (CT* ptr): _ptr (ptr) {}
+    iterator_t (const iterator_t<CT>& it): _ptr (it._ptr) {}
+
+    CT& operator*() const {return *_ptr;}
+    CT* operator->() const {return _ptr;}
+    CT& operator[](int32_t ofs) const {return _ptr[ofs];}
+
+    iterator_t<CT>& operator++() {++_ptr; return *this;}
+    iterator_t<CT> operator++(int) {return iterator_t<CT> (_ptr++);};
+    iterator_t<CT>& operator--() {--_ptr; return *this;}
+    iterator_t<CT> operator--(int) {return iterator_t<CT> (_ptr--);};
+    bool operator == (const iterator_t<CT>& i2) const {return _ptr == i2._ptr;}
+    bool operator != (const iterator_t<CT>& i2) const {return _ptr != i2._ptr;}
+    bool operator < (const iterator_t<CT>& i2) const {return _ptr < i2._ptr;}
+    bool operator > (const iterator_t<CT>& i2) const {return _ptr > i2._ptr;}
+    bool operator <= (const iterator_t<CT>& i2) const {return _ptr <= i2._ptr;}
+    bool operator >= (const iterator_t<CT>& i2) const {return _ptr >= i2._ptr;}
+    iterator_t<CT> operator + (int32_t ofs) const {return iterator (_ptr + ofs);}
+    iterator_t<CT>& operator += (int32_t ofs) {_ptr += ofs; return *this;}
+    iterator_t<CT> operator - (int32_t ofs) const {return iterator (_ptr - ofs);}
+    iterator_t<CT>& operator -= (int32_t ofs) {_ptr -= ofs; return *this;}
+  };
+  // http://en.cppreference.com/w/cpp/concept/Container
+  typedef char value_type;
+  typedef char& reference;
+  typedef const char& const_reference;
+  typedef uint32_t size_type;
+  typedef int32_t difference_type;
+  typedef iterator_t<char> iterator;
+  typedef iterator_t<const char> const_iterator;
+  iterator begin() {return iterator ((char*) _buf);}
+  const_iterator begin() const {return const_iterator ((char*) _buf);}
+  iterator end() {return iterator ((char*) _buf + size());}
+  const_iterator end() const {return const_iterator ((char*) _buf + size());}
+  const_iterator cbegin() const {return const_iterator ((char*) _buf);}
+  const_iterator cend() const {return const_iterator ((char*) _buf + size());}
 
 protected:
   friend class gstring_stream;
