@@ -32,7 +32,8 @@ class Runner {
   };
  public:
   struct JobInfo;
-  typedef std::function<void(JobInfo& jobInfo, Runner& runner)> job_t;
+  /** The job must return `true` if Runner is to continue invoking it. */
+  typedef std::function<bool(JobInfo& jobInfo)> job_t;
   struct JobInfo {
     job_t job;
     float pauseSec = 1.0f;
@@ -132,20 +133,17 @@ public:
     std::unique_lock<std::recursive_mutex> lock (_mutex);
     _jobs.erase (name);
   }
-  bool removeJob (JobInfo& jobInfo) {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
-    for (auto it = _jobs.begin(), end = _jobs.end(); it != end; ++it)
-      if (&(it->second) == &jobInfo) {_jobs.erase (it); return true;}
-    return false;
-  }
   /** Invoked automatically from a libevent timer; can also be invoked manually. */
   void run() {
     std::unique_lock<std::recursive_mutex> lock (_mutex);
     runCurlUnderLock();
     // Run non-CURL jobs.
     struct timespec ct; clock_gettime (CLOCK_MONOTONIC, &ct);
-    for (auto it = _jobs.begin(), end = _jobs.end(); it != end; ++it) try {
-      if (shouldRun (*it, ct)) it->second.job (it->second, *this);
+    auto it = _jobs.begin(), end = _jobs.end(); while (it != end) try {
+      auto jobIt = it++;
+      if (shouldRun (*jobIt, ct))
+        if (!jobIt->second.job (jobIt->second))
+          _jobs.erase (jobIt);
     } catch (const std::exception& ex) {
       char eBuf[512]; gstring err (sizeof(eBuf), eBuf, false, 0);
       err << "glim::Runner: error in job " << it->first << ": " << ex.what();
