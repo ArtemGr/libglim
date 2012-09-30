@@ -65,6 +65,7 @@ class Curl {
   Curl& send (gstring* text) {_send = text; _sent = 0; return *this;}
   Curl& send (const gstring& text) {_localSend = text; _send = &_localSend; _sent = 0; return *this;}
 
+  /** Adds "Content-Type" header into `_headers`. */
   Curl& contentType (const char* ct) {
     char ctb[64]; gstring cth (sizeof (ctb), ctb, false, 0);
     cth << "Content-Type: " << ct << "\r\n";
@@ -72,6 +73,10 @@ class Curl {
     return *this;
   }
 
+  /**
+   * Sets the majority of options for the http request.\n
+   * NB: If `send` was used with a non-empty string then `http` will use `CURLOPT_UPLOAD`, setting http method to `PUT`.
+   */
   Curl& http (const char* url, int timeout = 20) {
     curl_easy_setopt (_curl, CURLOPT_URL, url);
     curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToGstring);
@@ -87,6 +92,12 @@ class Curl {
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);}
     if (_headers)
       curl_easy_setopt (_curl, CURLOPT_HTTPHEADER, _headers); // http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTHTTPHEADER
+    return *this;
+  }
+
+  /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method. */
+  Curl& method (const char* method) {
+    curl_easy_setopt (_curl, CURLOPT_CUSTOMREQUEST, method);
     return *this;
   }
 
