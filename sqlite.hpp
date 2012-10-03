@@ -33,6 +33,7 @@ limitations under the License.
 #include <sys/stat.h> // stat
 #include <unistd.h> // stat
 #include <errno.h> // stat
+#include <stdio.h> // snprintf
 #include <stdint.h>
 
 namespace glim {
@@ -70,7 +71,7 @@ class Sqlite {
   /// No copying allowed.
   Sqlite& operator = (const Sqlite& other) {return *this;}
   /// No copying allowed.
-  Sqlite (const Sqlite& other) {}
+  Sqlite (const Sqlite& other) {};
   friend class SqliteSession;
   protected:
   /// Filename the database was opened with; we need it to reopen the database on fork()s.
@@ -99,7 +100,7 @@ class Sqlite {
     if (flags & existing) {
       // Check if the file exists already.
       struct stat st; if (stat (filename.c_str(), &st))
-        throw std::runtime_error(filename + ": " + strerror(errno));
+        throw std::runtime_error(filename + ": " + ::strerror(errno));
     }
     ::pthread_mutex_init (&mutex, NULL);
     this->filename = filename;
@@ -115,6 +116,15 @@ class Sqlite {
     if (::sqlite3_close(handler) != SQLITE_OK)
       throw std::runtime_error(std::string ("sqlite3_close(): ") + ::sqlite3_errmsg(handler));
   }
+
+  Sqlite& exec (const char* query);
+  /**
+   * Invokes `exec` on `query.c_str()`.
+   * Example:\code
+   *   glim::Sqlite sqlite (":memory:");
+   *   for (std::string pv: {"page_size = 4096", "secure_delete = 1"}) sqlite->exec2 ("PRAGMA " + pv); \endcode
+   */
+  template <typename StringLike> Sqlite& exec2 (StringLike query) {return exec (query.c_str());}
 };
 
 /**
@@ -127,7 +137,7 @@ class SqliteSession {
   /// No copying allowed.
   SqliteSession& operator = (const SqliteSession& other) {return *this;}
   /// No copying allowed.
-  SqliteSession(SqliteSession& other) {}
+  SqliteSession(SqliteSession& other): db (NULL) {}
   protected:
   Sqlite* db;
   public:
@@ -137,7 +147,7 @@ class SqliteSession {
    */
   SqliteSession (Sqlite* sqlite): db (sqlite) {
     int err = ::pthread_mutex_lock (&(db->mutex));
-    if (err != 0) throw std::runtime_error(std::string ("error locking the mutex: ") + strerror(err));
+    if (err != 0) throw std::runtime_error(std::string ("error locking the mutex: ") + ::strerror(err));
   }
   /**
    * A shorter way to construct query from the session.
@@ -160,7 +170,7 @@ class SqliteSession {
     if (db == NULL) return;
     int err = ::pthread_mutex_unlock (&(db->mutex));
     db = NULL;
-    if (err != 0) throw std::runtime_error(std::string ("error unlocking the mutex: ") + strerror(err));
+    if (err != 0) throw std::runtime_error(std::string ("error unlocking the mutex: ") + ::strerror(err));
   }
   /// True if the \c close method has been already called on this SqliteSession.
   bool isClosed () const {
@@ -178,6 +188,19 @@ class SqliteSession {
    */
   operator ::sqlite3* () const {return db->handler;}
 };
+
+/**
+ * Execute the given query, throwing std::runtime_error on failure.\n
+ * Example:\code
+ *   glim::Sqlite sqlite (":memory:");
+ *   sqlite.exec ("PRAGMA page_size = 4096") .exec ("PRAGMA secure_delete = 1"); \endcode
+ */
+inline Sqlite& Sqlite::exec (const char* query) {
+  SqliteSession ses (this); // Maintains the locks.
+  char* errmsg = NULL; ::sqlite3_exec (handler, query, NULL, NULL, &errmsg);
+  if (errmsg) throw std::runtime_error (std::string ("Sqlite::exec, error in query (") + query + "): " + errmsg);
+  return *this;
+}
 
 /**
  * Wraps the sqlite3_stmt; will prepare it, bind values, query and finalize.
