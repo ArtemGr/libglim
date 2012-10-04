@@ -214,7 +214,7 @@ class SqliteQuery {
   int mChanges;
   void prepare (SqliteSession* session, char const* query, int queryLength) {
     ::sqlite3* handler = *session;
-    if (::sqlite3_prepare (handler, query, queryLength, &statement, NULL) != SQLITE_OK)
+    if (::sqlite3_prepare_v2 (handler, query, queryLength, &statement, NULL) != SQLITE_OK)
       throw std::runtime_error(std::string(query, queryLength) + ": " + ::sqlite3_errmsg(handler));
   }
   public:
