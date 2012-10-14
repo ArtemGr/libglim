@@ -206,7 +206,7 @@ inline Sqlite& Sqlite::exec (const char* query) {
  * Wraps the sqlite3_stmt; will prepare it, bind values, query and finalize.
  */
 class SqliteQuery {
-  protected:
+ protected:
   ::sqlite3_stmt* statement;
   SqliteSession* session;
   int bindCounter;
@@ -217,7 +217,16 @@ class SqliteQuery {
     if (::sqlite3_prepare_v2 (handler, query, queryLength, &statement, NULL) != SQLITE_OK)
       throw std::runtime_error(std::string(query, queryLength) + ": " + ::sqlite3_errmsg(handler));
   }
-  public:
+  /** Shan't copy. */
+  SqliteQuery (const SqliteQuery& other) {}
+ public:
+  SqliteQuery (SqliteQuery&& rvalue) {
+    statement = rvalue.statement;
+    session = rvalue.session;
+    bindCounter = rvalue.bindCounter;
+    mChanges = rvalue.mChanges;
+    rvalue.statement = nullptr;
+  }
   /**
    * Prepares the query.
    * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
