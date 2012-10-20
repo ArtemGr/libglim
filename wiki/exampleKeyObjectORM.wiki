@@ -1,0 +1,59 @@
+#summary Simple key-object ORM example.
+
+Example creating a convenient key-object wrapper around SQLite.
+Here GcState is the object we want to keep in the database.
+GcState instances are created and modified as simple as:
+{{{
+GcStateDb db;
+db["foo"].meta = "bar";
+}}}
+
+And the wrapper:
+
+{{{
+#include <glim/sqlite.hpp>
+using glim::Sqlite; using glim::SqliteQuery; using glim::SqliteSession;
+#define S(str) (std::pair<char const*, int>(str, sizeof (str) - 1))
+
+  struct GcState {
+    string meta; string path; sqlite3_int64 inBackupSec = 0, inCephSec = 0, checkedSec = 0; string removed; sqlite3_int64 syncedSec = 0;
+  };
+  struct GcStateDb {
+    Sqlite _sqlite;
+    std::map<string, GcState> _dirty; //< operator[] returns a reference and since we don't know whether it is modified or not we treat it as "dirty".
+    GcStateDb(): _sqlite ("/dev/shm/img2/img2scanner.sq3") {
+      for (string pv: {"auto_vacuum = 1", "synchronous = 0", "journal_mode = TRUNCATE", "page_size = 4096"}) _sqlite.exec2 ("PRAGMA " + pv);
+      _sqlite.exec ("CREATE TABLE IF NOT EXISTS gcState (id TEXT NOT NULL PRIMARY KEY"
+        ", meta TEXT NOT NULL, path TEXT"
+        ", inBackupSec INTEGER, inCephSec INTEGER, checkedSec INTEGER, removed TEXT, syncedSec INTEGER)");
+    }
+    GcState& operator[] (const string& id) {
+      SqliteSession ses (&_sqlite); // Acquire the mutex first.
+      auto it = _dirty.find (id); if (it != _dirty.end()) return it->second;
+      // No state in the map, read from the database.
+      SqliteQuery query (&ses, S("SELECT meta, path, inBackupSec, inCephSec, checkedSec, removed, syncedSec FROM gcState WHERE id = ?"));
+      GcState& gcState = _dirty[id];
+      if (query.bind (1, id) .step()) {
+        gcState.meta = query.stringAt (1);
+        gcState.path = query.stringAt (2);
+        gcState.inBackupSec = query.int64at (3);
+        gcState.inCephSec = query.int64at (4);
+        gcState.checkedSec = query.int64at (5);
+        gcState.removed = query.stringAt (6);
+        gcState.syncedSec = query.int64at (7);
+      }
+      return gcState;
+    }
+    void flush() {
+      SqliteSession ses (&_sqlite); // Acquire the mutex first.
+      SqliteQuery query (&ses, S("REPLACE INTO gcState (meta, path, inBackupSec, inCephSec, checkedSec, removed, syncedSec, id) VALUES (?,?,?,?,?,?,?,?)"));
+      ses.query ("BEGIN") .ustep();
+      for (auto& entry: _dirty)
+        query.bind (1, entry.second.meta) .bind (2, entry.second.path) .bind (3, entry.second.inBackupSec) .bind (4, entry.second.inCephSec)
+          .bind (5, entry.second.checkedSec) .bind (6, entry.second.removed) .bind (7, entry.second.syncedSec)
+          .bind (8, entry.first) .ustep();
+      ses.query ("COMMIT") .ustep();
+    }
+    ~GcStateDb() {flush();}
+  };
+}}}
