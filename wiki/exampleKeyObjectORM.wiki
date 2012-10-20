@@ -53,6 +53,7 @@ using glim::Sqlite; using glim::SqliteQuery; using glim::SqliteSession;
           .bind (5, entry.second.checkedSec) .bind (6, entry.second.removed) .bind (7, entry.second.syncedSec)
           .bind (8, entry.first) .ustep();
       ses.query ("COMMIT") .ustep();
+      _dirty.clear();
     }
     ~GcStateDb() {flush();}
   };
