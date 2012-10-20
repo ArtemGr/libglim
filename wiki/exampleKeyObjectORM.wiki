@@ -13,7 +13,7 @@ And the wrapper:
 {{{
 #include <glim/sqlite.hpp>
 using glim::Sqlite; using glim::SqliteQuery; using glim::SqliteSession;
-#define S(str) (std::pair<char const*, int>(str, sizeof (str) - 1))
+#define S(cstr) (std::pair<char const*, int>(cstr, sizeof (cstr) - 1))
 
   struct GcState {
     string meta; string path; sqlite3_int64 inBackupSec = 0, inCephSec = 0, checkedSec = 0; string removed; sqlite3_int64 syncedSec = 0;
