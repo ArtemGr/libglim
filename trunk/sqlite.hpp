@@ -41,6 +41,10 @@ namespace glim {
 class SqliteSession;
 class SqliteQuery;
 
+struct SqliteEx: public std::runtime_error {
+  SqliteEx (const std::string& what): std::runtime_error (what) {}
+};
+
 /**
  * The database.
  * According to sqlite3_open <a href="http://sqlite.org/capi3ref.html#sqlite3_open">documentation</a>,
@@ -84,7 +88,7 @@ class Sqlite {
   enum Flags {
     /**
      * The file will be checked for existence.
-     * std::runtime_error is thrown if the file is not accessible;
+     * SqliteEx is thrown if the file is not accessible;
      * format of the error description is "$filename: $strerror".\n
      * Usage example: \code Sqlite db ("filename", Sqlite::existing); \endcode
      */
@@ -94,27 +98,27 @@ class Sqlite {
    * Opens the database.
    * @param filename Database filename (UTF-8).
    * @param flags Optional. Currently there is the #existing flag.
-   * @throws std::runtime_error Thrown if we can't open the database.
+   * @throws SqliteEx Thrown if we can't open the database.
    */
   Sqlite (std::string filename, int flags = 0) {
     if (flags & existing) {
       // Check if the file exists already.
       struct stat st; if (stat (filename.c_str(), &st))
-        throw std::runtime_error(filename + ": " + ::strerror(errno));
+        throw SqliteEx (filename + ": " + ::strerror(errno));
     }
     ::pthread_mutex_init (&mutex, NULL);
     this->filename = filename;
     if (::sqlite3_open(filename.c_str(), &handler) != SQLITE_OK)
-      throw std::runtime_error(std::string("sqlite3_open(") + filename + "): " + ::sqlite3_errmsg(handler));
+      throw SqliteEx (std::string("sqlite3_open(") + filename + "): " + ::sqlite3_errmsg(handler));
   }
   /**
    * Closes the database.
-   * @throws std::runtime_error Thrown if we can't close the database.
+   * @throws SqliteEx Thrown if we can't close the database.
    */
   ~Sqlite () {
     ::pthread_mutex_destroy (&mutex);
     if (::sqlite3_close(handler) != SQLITE_OK)
-      throw std::runtime_error(std::string ("sqlite3_close(): ") + ::sqlite3_errmsg(handler));
+      throw SqliteEx (std::string ("sqlite3_close(): ") + ::sqlite3_errmsg(handler));
   }
 
   Sqlite& exec (const char* query);
@@ -143,11 +147,11 @@ class SqliteSession {
   public:
   /**
    * Locks the database.
-   * @throws std::runtime_error if a mutex error occurs.
+   * @throws SqliteEx if a mutex error occurs.
    */
   SqliteSession (Sqlite* sqlite): db (sqlite) {
     int err = ::pthread_mutex_lock (&(db->mutex));
-    if (err != 0) throw std::runtime_error(std::string ("error locking the mutex: ") + ::strerror(err));
+    if (err != 0) throw SqliteEx (std::string ("error locking the mutex: ") + ::strerror(err));
   }
   /**
    * A shorter way to construct query from the session.
@@ -164,13 +168,13 @@ class SqliteSession {
    * It is safe to call this method multiple times.\n
    * You must not use the session after it was closed.\n
    * All resources allocated within this session must be released before the session is closed.
-   * @throws std::runtime_error if a mutex error occurs.
+   * @throws SqliteEx if a mutex error occurs.
    */
   void close () {
     if (db == NULL) return;
     int err = ::pthread_mutex_unlock (&(db->mutex));
     db = NULL;
-    if (err != 0) throw std::runtime_error(std::string ("error unlocking the mutex: ") + ::strerror(err));
+    if (err != 0) throw SqliteEx (std::string ("error unlocking the mutex: ") + ::strerror(err));
   }
   /// True if the \c close method has been already called on this SqliteSession.
   bool isClosed () const {
@@ -190,7 +194,7 @@ class SqliteSession {
 };
 
 /**
- * Execute the given query, throwing std::runtime_error on failure.\n
+ * Execute the given query, throwing SqliteEx on failure.\n
  * Example:\code
  *   glim::Sqlite sqlite (":memory:");
  *   sqlite.exec ("PRAGMA page_size = 4096") .exec ("PRAGMA secure_delete = 1"); \endcode
@@ -198,7 +202,7 @@ class SqliteSession {
 inline Sqlite& Sqlite::exec (const char* query) {
   SqliteSession ses (this); // Maintains the locks.
   char* errmsg = NULL; ::sqlite3_exec (handler, query, NULL, NULL, &errmsg);
-  if (errmsg) throw std::runtime_error (std::string ("Sqlite::exec, error in query (") + query + "): " + errmsg);
+  if (errmsg) throw SqliteEx (std::string ("Sqlite::exec, error in query (") + query + "): " + errmsg);
   return *this;
 }
 
@@ -215,7 +219,7 @@ class SqliteQuery {
   void prepare (SqliteSession* session, char const* query, int queryLength) {
     ::sqlite3* handler = *session;
     if (::sqlite3_prepare_v2 (handler, query, queryLength, &statement, NULL) != SQLITE_OK)
-      throw std::runtime_error(std::string(query, queryLength) + ": " + ::sqlite3_errmsg(handler));
+      throw SqliteEx (std::string(query, queryLength) + ": " + ::sqlite3_errmsg(handler));
   }
   /** Shan't copy. */
   SqliteQuery (const SqliteQuery& other) {}
@@ -229,7 +233,7 @@ class SqliteQuery {
   }
   /**
    * Prepares the query.
-   * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
+   * @throws SqliteEx if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
    */
   SqliteQuery (SqliteSession* session, char const* query, int queryLength)
     : statement (NULL), session (session), bindCounter (0), mChanges (-1) {
@@ -237,7 +241,7 @@ class SqliteQuery {
   }
   /**
    * Prepares the query.
-   * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
+   * @throws SqliteEx if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
    */
   SqliteQuery (SqliteSession* session, std::pair<char const*, int> query)
     : statement (NULL), session (session), bindCounter (0), mChanges (-1) {
@@ -245,7 +249,7 @@ class SqliteQuery {
   }
   /**
    * Prepares the query.
-   * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
+   * @throws SqliteEx if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
    */
   SqliteQuery (SqliteSession* session, std::string query)
     : statement (NULL), session (session), bindCounter (0), mChanges (-1) {
@@ -283,7 +287,7 @@ class SqliteQuery {
       mChanges = ::sqlite3_changes (*session);
       return false;
     }
-    throw std::runtime_error (std::string(::sqlite3_errmsg(*session)));
+    throw SqliteEx (std::string(::sqlite3_errmsg(*session)));
   }
   /**
    * Perform #step and throw an exception if #step has returned \c false.
@@ -292,7 +296,7 @@ class SqliteQuery {
    */
   SqliteQuery& qstep () {
     if (!step())
-      throw std::runtime_error (std::string("qstep: no rows returned / affected"));
+      throw SqliteEx (std::string("qstep: no rows returned / affected"));
     return *this;
   }
   /**
@@ -309,7 +313,7 @@ class SqliteQuery {
       return mChanges;
     }
     if (ret == SQLITE_ROW) return 0;
-    throw std::runtime_error (std::string(::sqlite3_errmsg(*session)));
+    throw SqliteEx (std::string(::sqlite3_errmsg(*session)));
   }
   
   /**
@@ -343,8 +347,8 @@ class SqliteQuery {
    * @param column 1-based.
    * @see http://sqlite.org/capi3ref.html#sqlite3_column_text
    */
-  int64_t int64at (int column) {
-    return (int64_t) ::sqlite3_column_int64 (statement, --column);
+  sqlite3_int64 int64at (int column) {
+    return ::sqlite3_column_int64 (statement, --column);
   }
   
   /**
@@ -394,14 +398,14 @@ class SqliteQuery {
   }
   /**
    * Binds a value using the named parameter and one of the bind methods.
-   * @throws std::runtime_error if the name could not be found.
+   * @throws SqliteEx if the name could not be found.
    * @see http://sqlite.org/capi3ref.html#sqlite3_bind_parameter_index
    */
   template<typename T>
   SqliteQuery& bind (char const* name, T value) {
     int index = ::sqlite3_bind_parameter_index (statement, name);
     if (index == 0)
-      throw std::runtime_error (std::string ("No such parameter in the query: ") + name);
+      throw SqliteEx (std::string ("No such parameter in the query: ") + name);
     return bind (index, value);
   }
   
@@ -412,7 +416,7 @@ class SqliteQuery {
   SqliteQuery& bind (int index, const char* text, int length, bool transient = false) {
     if (::sqlite3_bind_text (statement, index, text, length,
                              transient ? SQLITE_TRANSIENT : SQLITE_STATIC) != SQLITE_OK)
-      throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
+      throw SqliteEx (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
   /**
@@ -422,17 +426,17 @@ class SqliteQuery {
   SqliteQuery& bind (int index, std::pair<const char*, int> text, bool transient = false) {
     if (::sqlite3_bind_text (statement, index, text.first, text.second,
                              transient ? SQLITE_TRANSIENT : SQLITE_STATIC) != SQLITE_OK)
-      throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
+      throw SqliteEx (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
   /**
    * Bind a string to the query.
    * @param transient must be true, if lifetime of the string might be shorter than that of the query.
    */
-  SqliteQuery& bind (int index, std::string text, bool transient = true) {
-    if (::sqlite3_bind_text (statement, index, text.c_str(), text.length(),
+  SqliteQuery& bind (int index, const std::string& text, bool transient = true) {
+    if (::sqlite3_bind_text (statement, index, text.data(), text.length(),
                              transient ? SQLITE_TRANSIENT : SQLITE_STATIC) != SQLITE_OK)
-      throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
+      throw SqliteEx (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
   /**
@@ -440,7 +444,7 @@ class SqliteQuery {
    */
   SqliteQuery& bind (int index, int value) {
     if (::sqlite3_bind_int (statement, index, value) != SQLITE_OK)
-      throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
+      throw SqliteEx (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
   /**
@@ -448,7 +452,7 @@ class SqliteQuery {
    */
   SqliteQuery& bind (int index, sqlite3_int64 value) {
     if (::sqlite3_bind_int64 (statement, index, value) != SQLITE_OK)
-      throw std::runtime_error (std::string (::sqlite3_errmsg (*session)));
+      throw SqliteEx (std::string (::sqlite3_errmsg (*session)));
     return *this;
   }
 };
@@ -473,7 +477,7 @@ class SqliteParQuery: public SqliteQuery {
    * Prepares the query.
    * @param repeat the number of times we try to repeat the query when SQLITE_BUSY is returned.
    * @param wait how long, in milliseconds (1/1000 of a second) we are to wait before repeating.
-   * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
+   * @throws SqliteEx if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
    */
   SqliteParQuery (SqliteSession* session, char const* query, int queryLength, int repeat = 90, int wait = 20)
     : SqliteQuery (session, query, queryLength) {
@@ -487,7 +491,7 @@ class SqliteParQuery: public SqliteQuery {
    * @param query the SQL query together with its length.
    * @param repeat the number of times we try to repeat the query when SQLITE_BUSY is returned.
    * @param wait how long, in milliseconds (1/1000 of a second) we are to wait before repeating.
-   * @throws std::runtime_error if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
+   * @throws SqliteEx if sqlite3_prepare fails; format of the error message is "$query: $errmsg".
    */
   SqliteParQuery (SqliteSession* session, std::pair<char const*, int> query, int repeat = 90, int wait = 20)
     : SqliteQuery (session, query) {
@@ -520,7 +524,7 @@ class SqliteParQuery: public SqliteQuery {
       ::sqlite3_sleep (wait);
       ret = ::sqlite3_step (statement);
     }
-    throw std::runtime_error (std::string(query, queryLength) + ::sqlite3_errmsg(*session));
+    throw SqliteEx (std::string(query, queryLength) + ::sqlite3_errmsg(*session));
   }
 };
 
