@@ -4,13 +4,13 @@
 #include <assert.h>
 #include <stdlib.h> // malloc, realloc, free
 #include <stdint.h>
-#include <string.h> // memcpy
+#include <string.h> // memcpy, memmem
 #include <stdexcept>
 #include <iostream>
 #include <iterator>
 
 // Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
-#define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, sizeof (cstr) - 1)))
+#define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, sizeof (cstr) - 1, true)))
 
 namespace glim {
 
@@ -51,8 +51,8 @@ class gstring {
   enum Flags {
     FREE_FLAG = 0x80000000, // 1st bit; `_buf` needs `free`ing
     FREE_OFFSET = 31,
-    //RO_FLAG = 0x40000000, // 2nd bit; `_buf` is read-only
-    //RO_OFFSET = 30,
+    REF_FLAG = 0x40000000, // 2nd bit; `_buf` has an extended life-time (such as C string literals) and can be shared (passed by reference)
+    REF_OFFSET = 30,
     CAPACITY_MASK = 0x3F000000, // 3..8 bits; `_buf` size is 2^this
     CAPACITY_OFFSET = 24,
     LENGTH_MASK = 0x00FFFFFF, // 9th bit; allocated capacity
@@ -70,10 +70,14 @@ public:
    * @param free Whether the `buf` should be `free`d on resize or gstring destruction.
    * @param readOnly Whether the `buf` is read-only and should not be written to.
    * @param length String length inside the `buf`.
+   * @param ref If true then the `buf` can be passed by reference instead of being copied.
+   *            This is useful for wrapping C string literals.
    */
-  explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length) {
+  explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length, bool ref = false) {
+    if (ref && free) throw std::runtime_error ("gstring: ref && free"); // Shared buffer must not be freed by gstring.
     uint32_t power = 0; while (((uint32_t) 1 << (power + 1)) <= bufSize) ++power;
     _meta = ((uint32_t) free << FREE_OFFSET) |
+            ((uint32_t) ref << REF_OFFSET) |
             (power << CAPACITY_OFFSET) |
             (length & LENGTH_MASK);
     _buf = buf;
@@ -110,14 +114,20 @@ public:
     }
   }
 
+  /** If `gstr` is `copiedByReference` then make a shallow copy of it,
+   * otherwise copy `gstr` contents into a `malloc`ed buffer. */
   gstring (const gstring& gstr) {
     uint32_t glen = gstr.length();
     if (glen != 0) {
-      _buf = ::malloc (glen);
-      if (!_buf) throw std::runtime_error ("!malloc");
-      ::memcpy (_buf, gstr._buf, glen);
-      _meta = (uint32_t) FREE_FLAG |
-              (glen & LENGTH_MASK);
+      if (gstr.copiedByReference()) {
+        _meta = gstr._meta; _buf = gstr._buf;
+      } else {
+        _buf = ::malloc (glen);
+        if (!_buf) throw std::runtime_error ("!malloc");
+        ::memcpy (_buf, gstr._buf, glen);
+        _meta = (uint32_t) FREE_FLAG |
+                (glen & LENGTH_MASK);
+      }
     } else {
       _meta = 0; _buf = NULL;
     }
@@ -135,6 +145,10 @@ public:
         power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
       } else {
         if (_buf != NULL && needsFreeing()) ::free (_buf);
+        if (gstr.copiedByReference()) {
+          _meta = gstr._meta; _buf = gstr._buf;
+          return *this;
+        }
         _buf = ::malloc (glen);
         if (_buf == NULL) throw std::runtime_error ("malloc failed");
       }
@@ -154,6 +168,7 @@ public:
   }
 
   bool needsFreeing() const {return _meta & FREE_FLAG;}
+  bool copiedByReference() const {return _meta & REF_FLAG;}
   /** Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated. */
   uint32_t capacity() const {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
   uint32_t length() const {return _meta & LENGTH_MASK;}
@@ -239,6 +254,16 @@ public:
   const_iterator end() const {return const_iterator ((char*) _buf + size());}
   const_iterator cbegin() const {return const_iterator ((char*) _buf);}
   const_iterator cend() const {return const_iterator ((char*) _buf + size());}
+
+  /** Returns -1 if not found. */
+  int32_t find (const char* str, int32_t pos, int32_t count) const {
+    const uint32_t hlen = length();
+    if (hlen == 0) return -1;
+    void* mret = memmem (_buf, hlen, str, count);
+    if (mret == 0) return -1;
+    return (char*) mret - (char*) _buf;
+  }
+  int32_t find (const char* str, int32_t pos = 0) const {return find (str, pos, strlen (str));}
 
 protected:
   friend class gstring_stream;
