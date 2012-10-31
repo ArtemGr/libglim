@@ -175,14 +175,17 @@ public:
   size_t size() const {return _meta & LENGTH_MASK;}
   bool empty() const {return (_meta & LENGTH_MASK) == 0;}
   std::string str() const {return std::string ((const char*) _buf, size());}
-  const char* c_str() {
+  /// NB: might move the string to a new buffer.
+  const char* c_str() const {
     uint32_t len = length();
     if (len == 0) return "";
     uint32_t cap = capacity();
     const char* buf = (const char*) _buf;
     if (len < cap && buf[len] == 0) return buf;
-    append (0);
-    setLength (len);
+    // c_str should work even for const gstring's, otherwise it's too much of a pain.
+    gstring* mut = const_cast<gstring*> (this);
+    mut->append (0);
+    mut->setLength (len);
     return (const char*) _buf;
   }
   bool equals (const char* cstr) const {
