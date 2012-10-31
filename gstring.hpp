@@ -401,6 +401,14 @@ public:
     }
     return *this;
   }
+  /// Remove characters [from,till) and return `from`.\n
+  /// Compatible with "boost/algorithm/string/trim.hpp".
+  iterator_t<char> erase (iterator_t<char> from, iterator_t<char> till) {
+    intptr_t ipos = from._ptr - (char*) _buf;
+    intptr_t count = till._ptr - from._ptr;
+    if (ipos >= 0 && count > 0) erase (ipos, count);
+    return from;
+  }
 
   ~gstring() {
     if (_buf != NULL && needsFreeing()) {::free (_buf); _buf = NULL;}

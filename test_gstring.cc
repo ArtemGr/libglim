@@ -10,8 +10,11 @@ using glim::gstring;
 #include <unordered_map>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/trim.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 
 static void testIterators();
+static void testBoost();
 
 int main () {
   std::cout << "Testing gstring.hpp ... " << std::flush;
@@ -89,6 +92,7 @@ int main () {
   if (gs1.capacity() != 1) throw std::runtime_error ("bar_ != 4");
 
   testIterators();
+  testBoost();
 
   std::cout << "pass." << std::endl;
   return 0;
@@ -99,4 +103,13 @@ static void testIterators() {
   gstring buf; for (auto it = foo.begin(), end = foo.end(); it != end; ++it) buf << *it;
   assert (buf == "foo");
   assert (boost::starts_with (foo, "f") && boost::ends_with (foo, "oo"));
+}
+
+static void testBoost() {
+  gstring str ("  foo\t\r\n");
+  boost::trim (str);
+  assert (str == "foo");
+
+  gstring up ("FOO"); boost::to_lower (up);
+  assert (up == "foo");
 }
