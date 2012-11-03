@@ -25,7 +25,11 @@ struct hgot {
   struct evbuffer* body = 0;
   struct evhttp_request* req = 0;
   size_t bodyLength() const {return evbuffer_get_length (body);}
-  const char* bodyCStr() {return (const char*) evbuffer_pullup (body, -1);}
+  /** Warning: the string is NOT zero-terminated. */
+  const char* bodyData() {return (const char*) evbuffer_pullup (body, -1);}
+#ifdef _GSTRING_INCLUDED
+  glim::gstring gbody() {return glim::gstring (0, evbuffer_pullup (body, -1), false, evbuffer_get_length (body));}
+#endif
 };
 
 /** Used internally to pass both connection and handler into callback. */
@@ -76,16 +80,35 @@ class hget {
   std::shared_ptr<struct event_base> _evbase;
   std::shared_ptr<struct evdns_base> _dnsbase;
   std::function<void(struct evhttp_request*)> _requestBuilder;
+  enum evhttp_cmd_type _method;
  public:
   typedef std::shared_ptr<struct evhttp_uri> uri_t;
   typedef std::function<float(hgot&,uri_t,int32_t)> until_handler_t;
  public:
-  hget (std::shared_ptr<struct event_base> evbase, std::shared_ptr<struct evdns_base> dnsbase): _evbase (evbase), _dnsbase (dnsbase) {}
+  hget (std::shared_ptr<struct event_base> evbase, std::shared_ptr<struct evdns_base> dnsbase):
+    _evbase (evbase), _dnsbase (dnsbase), _method (EVHTTP_REQ_GET) {}
 
   /** Modifies the request before its execution. */
   hget& setRequestBuilder (std::function<void(struct evhttp_request*)> rb) {
     _requestBuilder = rb;
     return *this;
+  }
+
+  /** Uses a simple request builder to send the `str`.\n
+   * `str` is a `char` string class with methods `data` and `size`. */
+  template<typename STR> hget& payload (STR str, const char* contentType = nullptr, enum evhttp_cmd_type method = EVHTTP_REQ_POST) {
+    _method = method;
+    return setRequestBuilder ([str,contentType](struct evhttp_request* req) {
+      if (contentType) evhttp_add_header (req->output_headers, "Content-Type", contentType);
+      char buf[64];
+#ifdef _GSTRING_INCLUDED
+      *glim::itoa (buf, (int) str.size()) = 0;
+#else
+      snprintf (buf, 63, "%i", (int) str.size());
+#endif
+      evhttp_add_header (req->output_headers, "Content-Length", buf);
+      evbuffer_add (req->output_buffer, (const void*) str.data(), (size_t) str.size());
+    });
   }
 
   struct evhttp_request* go (uri_t uri, int32_t timeoutSec, std::function<void(hgot&)> handler) {
@@ -101,7 +124,7 @@ class hget {
     const char* get = evhttp_uri_get_path (uri.get());
     const char* qs = evhttp_uri_get_query (uri.get());
     if (qs == NULL) {
-      ret = evhttp_make_request (conn, req, EVHTTP_REQ_GET, get);
+      ret = evhttp_make_request (conn, req, _method, get);
     } else {
       size_t getLen = strlen (get);
       size_t qsLen = strlen (qs);
@@ -110,7 +133,7 @@ class hget {
       *caret++ = '?';
       caret = stpcpy (caret, qs);
       assert (caret - buf < sizeof (buf));
-      ret = evhttp_make_request (conn, req, EVHTTP_REQ_GET, buf);
+      ret = evhttp_make_request (conn, req, _method, buf);
     }
     if (ret) throw std::runtime_error ("hget: evhttp_make_request != 0");
     return req;
