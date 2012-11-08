@@ -75,7 +75,7 @@ class Sqlite {
   /// No copying allowed.
   Sqlite& operator = (const Sqlite& other) {return *this;}
   /// No copying allowed.
-  Sqlite (const Sqlite& other) {};
+  Sqlite (const Sqlite& other) = delete;
   friend class SqliteSession;
   protected:
   /// Filename the database was opened with; we need it to reopen the database on fork()s.
@@ -222,7 +222,7 @@ class SqliteQuery {
       throw SqliteEx (std::string(query, queryLength) + ": " + ::sqlite3_errmsg(handler));
   }
   /** Shan't copy. */
-  SqliteQuery (const SqliteQuery& other) {}
+  SqliteQuery (const SqliteQuery& other) = delete;
  public:
   SqliteQuery (SqliteQuery&& rvalue) {
     statement = rvalue.statement;
