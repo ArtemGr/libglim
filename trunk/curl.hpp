@@ -95,6 +95,24 @@ class Curl {
     return *this;
   }
 
+  /**
+   * Set options for smtp request.\n
+   * Example: \code
+   *   long rc = Curl().send ("Subject: subject\r\n\r\n" "text\r\n") .smtp ("from", "to") .go().status();
+   *   if (rc != 250) std::cerr << "Error sending email: " << rc << std::endl;
+   * \endcode */
+  Curl& smtp (const char* from, const char* to) {
+    curl_easy_setopt (_curl, CURLOPT_URL, "smtp://127.0.0.1");
+    if (from) curl_easy_setopt (_curl, CURLOPT_MAIL_FROM, from);
+    if (to) _headers = curl_slist_append (_headers, to);
+    if (_headers) curl_easy_setopt (_curl, CURLOPT_MAIL_RCPT, _headers);
+    if (_send && !_send->empty()) {
+      curl_easy_setopt (_curl, CURLOPT_READFUNCTION, glim::curlReadFromGstring);
+      curl_easy_setopt (_curl, CURLOPT_READDATA, this);
+    }
+    return *this;
+  }
+
   /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method. */
   Curl& method (const char* method) {
     curl_easy_setopt (_curl, CURLOPT_CUSTOMREQUEST, method);
