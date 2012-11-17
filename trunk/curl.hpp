@@ -140,7 +140,7 @@ class Curl {
 inline size_t curlReadFromGstring (void *ptr, size_t size, size_t nmemb, void *userdata) {
   Curl* curl = (Curl*) userdata;
   size_t len = std::min (curl->_send->size() - curl->_sent, size * nmemb);
-  if (len) memcpy (ptr, curl->_send->data(), len);
+  if (len) memcpy (ptr, curl->_send->data() + curl->_sent, len);
   curl->_sent += len;
   return len;}
 
