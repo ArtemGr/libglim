@@ -61,7 +61,7 @@ class gstring {
 public:
   void* _buf;
 public:
-  gstring(): _meta (0), _buf (NULL) {}
+  gstring(): _meta (0), _buf (nullptr) {}
   /**
    * Reuse `buf` of size `size`.
    * To fully use `buf` the `size` should be the power of two.
@@ -84,7 +84,7 @@ public:
   }
 
   /** Copy the characters into `gstring`. */
-  gstring (const char* chars): _meta (0), _buf (NULL) {
+  gstring (const char* chars): _meta (0), _buf (nullptr) {
     if (chars && *chars) {
       size_t length = ::strlen (chars);
       _buf = ::malloc (length);
@@ -99,13 +99,13 @@ public:
     if (length != 0) {
       _buf = ::malloc (length);
       ::memcpy (_buf, chars, length);
-    }
+    } else _buf = nullptr;
     _meta = (uint32_t) FREE_FLAG |
             (length & LENGTH_MASK);
   }
 
   /** Copy into `gstring`. */
-  gstring (const std::string& str): _meta (0), _buf (NULL) {
+  gstring (const std::string& str): _meta (0), _buf (nullptr) {
     if (!str.empty()) {
       _buf = ::malloc (str.length());
       ::memcpy (_buf, str.data(), str.length());
@@ -129,11 +129,11 @@ public:
                 (glen & LENGTH_MASK);
       }
     } else {
-      _meta = 0; _buf = NULL;
+      _meta = 0; _buf = nullptr;
     }
   }
   gstring (gstring&& gstr): _meta (gstr._meta), _buf (gstr._buf) {
-    gstr._meta = 0; gstr._buf = NULL;
+    gstr._meta = 0; gstr._buf = nullptr;
   }
   gstring& operator = (const gstring& gstr) {
     // cf. http://stackoverflow.com/questions/9322174/move-assignment-operator-and-if-this-rhs
@@ -144,13 +144,13 @@ public:
         // We reuse existing buffer. Keep capacity info.
         power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
       } else {
-        if (_buf != NULL && needsFreeing()) ::free (_buf);
+        if (_buf != nullptr && needsFreeing()) ::free (_buf);
         if (gstr.copiedByReference()) {
           _meta = gstr._meta; _buf = gstr._buf;
           return *this;
         }
         _buf = ::malloc (glen);
-        if (_buf == NULL) throw std::runtime_error ("malloc failed");
+        if (_buf == nullptr) throw std::runtime_error ("malloc failed");
       }
       ::memcpy (_buf, gstr._buf, glen);
       _meta = (uint32_t) FREE_FLAG |
@@ -161,9 +161,9 @@ public:
   }
   gstring& operator = (gstring&& gstr) {
     assert (this != &gstr);
-    if (_buf != NULL && needsFreeing()) free (_buf);
+    if (_buf != nullptr && needsFreeing()) free (_buf);
     _meta = gstr._meta; _buf = gstr._buf;
-    gstr._meta = 0; gstr._buf = NULL;
+    gstr._meta = 0; gstr._buf = nullptr;
     return *this;
   }
 
@@ -190,10 +190,10 @@ public:
   }
   bool equals (const char* cstr) const {
     const char* cstr_; uint32_t clen_;
-    if (cstr != NULL) {cstr_ = cstr; clen_ = strlen (cstr);} else {cstr_ = ""; clen_ = 0;}
+    if (cstr != nullptr) {cstr_ = cstr; clen_ = strlen (cstr);} else {cstr_ = ""; clen_ = 0;}
     const uint32_t len = length();
     if (len != clen_) return false;
-    const char* gstr_ = _buf != NULL ? (const char*) _buf : "";
+    const char* gstr_ = _buf != nullptr ? (const char*) _buf : "";
     return strncmp (gstr_, cstr_, len) == 0;
   }
   bool equals (const gstring& gs) const {
@@ -205,7 +205,7 @@ public:
   char& operator[] (unsigned index) {return ((char*)_buf)[index];}
   const char& operator[] (unsigned index) const {return ((const char*)_buf)[index];}
 
-  /// Access `_buf` as `char*`. `_buf` might be NULL.
+  /// Access `_buf` as `char*`. `_buf` might be nullptr.
   char* data() {return (char*)_buf;}
   const char* data() const {return (const char*)_buf;}
 
@@ -220,7 +220,7 @@ public:
   // http://en.cppreference.com/w/cpp/concept/Iterator
   template<typename CT> struct iterator_t: public std::iterator<std::random_access_iterator_tag, CT, int32_t> {
     CT* _ptr;
-    iterator_t (): _ptr (NULL) {}
+    iterator_t (): _ptr (nullptr) {}
     iterator_t (CT* ptr): _ptr (ptr) {}
     iterator_t (const iterator_t<CT>& it): _ptr (it._ptr) {}
 
@@ -282,12 +282,12 @@ protected:
     _meta = (_meta & ~CAPACITY_MASK) | (power << CAPACITY_OFFSET);
     if (needsFreeing()) {
       _buf = ::realloc (_buf, capacity());
-      if (_buf == NULL) throw std::runtime_error ("realloc failed");
+      if (_buf == nullptr) throw std::runtime_error ("realloc failed");
     } else {
       const char* oldBuf = (const char*) _buf;
       _buf = ::malloc (capacity());
-      if (_buf == NULL) throw std::runtime_error ("malloc failed");
-      if (oldBuf != NULL) ::memcpy (_buf, oldBuf, length());
+      if (_buf == nullptr) throw std::runtime_error ("malloc failed");
+      if (oldBuf != nullptr) ::memcpy (_buf, oldBuf, length());
       _meta |= FREE_FLAG;
     }
   }
@@ -343,9 +343,9 @@ public:
   /// No heap space allocated.\n
   /// Throws std::runtime_error if netstring parsing fails.\n
   /// If parsing was successfull, then `after` is set to point after the parsed netstring.
-  gstring netstringAt (uint32_t pos, uint32_t* after = NULL) const {
+  gstring netstringAt (uint32_t pos, uint32_t* after = nullptr) const {
     const uint32_t len = length(); char* buf = (char*) _buf;
-    if (buf == NULL) throw std::runtime_error ("gstring: netstringAt: NULL");
+    if (buf == nullptr) throw std::runtime_error ("gstring: netstringAt: nullptr");
     uint32_t next = pos;
     while (next < len && buf[next] >= '0' && buf[next] <= '9') ++next;
     if (next >= len || buf[next] != ':' || next - pos > 10) throw std::runtime_error ("gstring: netstringAt: no header");
@@ -359,9 +359,9 @@ public:
   }
 
   /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
-  long intAt (uint32_t pos, uint32_t* after = NULL, int base = 10) const {
+  long intAt (uint32_t pos, uint32_t* after = nullptr, int base = 10) const {
     const uint32_t len = length(); char* buf = (char*) _buf;
-    if (pos >= len || buf == NULL) throw std::runtime_error ("gstring: intAt: pos >= len");
+    if (pos >= len || buf == nullptr) throw std::runtime_error ("gstring: intAt: pos >= len");
     char* endptr = 0;
     long lv = ::strtol (buf + pos, &endptr, base);
     uint32_t next = endptr - buf;
@@ -414,7 +414,7 @@ public:
   }
 
   ~gstring() {
-    if (_buf != NULL && needsFreeing()) {::free (_buf); _buf = NULL;}
+    if (_buf != nullptr && needsFreeing()) {::free (_buf); _buf = nullptr;}
   }
 };
 
@@ -426,7 +426,7 @@ inline bool operator != (const char* cstr, const gstring& gstr) {return !gstr.eq
 inline bool operator != (const gstring& gstr, const char* cstr) {return !gstr.equals (cstr);}
 
 inline std::ostream& operator << (std::ostream& os, const gstring& gstr) {
-  if (gstr._buf != NULL) os.write ((const char*) gstr._buf, gstr.length());
+  if (gstr._buf != nullptr) os.write ((const char*) gstr._buf, gstr.length());
   return os;
 }
 
@@ -444,7 +444,7 @@ class gstring_stream: public std::basic_streambuf<char, std::char_traits<char> >
 public:
   gstring_stream (gstring& gstr): _gstr (gstr) {
     char* buf = (char*) gstr._buf;
-    if (buf != NULL) setg (buf, buf, buf + gstr.length());
+    if (buf != nullptr) setg (buf, buf, buf + gstr.length());
   }
 protected:
   virtual int_type overflow (int_type ch) {
