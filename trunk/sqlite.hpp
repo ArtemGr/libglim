@@ -7,7 +7,7 @@
  * whose sole dependencies should be standard STL and posix threading libraries.
  * You can extract this file out of the "glim" library to include it separately in your project.
  * @code
-Copyright 2006 Kozarezov Artem Aleksandrovich <artem@bizlink.ru>
+Copyright 2006-2012 Kozarezov Artem Aleksandrovich
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
