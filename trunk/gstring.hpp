@@ -292,9 +292,8 @@ public:
   }
   int32_t find (const char* str, int32_t pos = 0) const {return find (str, pos, strlen (str));}
 
-protected:
-  friend class gstring_stream;
-  void grow (uint32_t to) {
+  /** Grow buffer to be at least `to` characters long. */
+  void reserve (uint32_t to) {
     uint32_t power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
     if (((uint32_t) 1 << power) < to) {
       ++power;
@@ -315,19 +314,22 @@ protected:
       _meta |= FREE_FLAG;
     }
   }
+
+protected:
+  friend class gstring_stream;
   void setLength (uint32_t len) {
     _meta = (_meta & ~LENGTH_MASK) | (len & LENGTH_MASK);
   }
   void append64 (int64_t iv, int bytes = 24) {
     uint32_t pos = length();
-    if (capacity() < pos + bytes) grow (pos + bytes);
+    if (capacity() < pos + bytes) reserve (pos + bytes);
     setLength (itoa ((char*) _buf + pos, iv, 10) - (char*) _buf);
   }
 public:
   void append (char ch) {
     uint32_t pos = length();
     const uint32_t cap = capacity();
-    if (pos >= cap || cap <= 1) grow (pos + 1);
+    if (pos >= cap || cap <= 1) reserve (pos + 1);
     ((char*)_buf)[pos] = ch;
     setLength (++pos);
   }
@@ -335,7 +337,7 @@ public:
     uint32_t len = length();
     uint32_t need = len + clen;
     const uint32_t cap = capacity();
-    if (need > cap || cap <= 1) grow (need);
+    if (need > cap || cap <= 1) reserve (need);
     ::memcpy ((char*) _buf + len, cstr, clen);
     setLength (need);
   }
@@ -403,7 +405,7 @@ public:
     if (!stream.good() || ch != ':') throw std::runtime_error ("!netstring");
     uint32_t glen = length();
     const uint32_t cap = capacity();
-    if (cap < glen + nlen || cap <= 1) grow (glen + nlen);
+    if (cap < glen + nlen || cap <= 1) reserve (glen + nlen);
     stream.read ((char*) _buf + glen, nlen);
     if (!stream.good()) throw std::runtime_error ("!netstring");
     ch = stream.get();
