@@ -31,8 +31,10 @@ limitations under the License.
 #include <iostream>
 #include <iterator>
 
-// Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
-#define C2GSTRING(cstr) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) cstr, false, sizeof (cstr) - 1, true)))
+/// Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
+#define C2GSTRING(CSTR) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) CSTR, false, sizeof (CSTR) - 1, true)))
+/// Usage: GSTRING_ON_STACK (buf, 64) << "foo" << "bar";
+#define GSTRING_ON_STACK(NAME, SIZE) char NAME##Buf[SIZE]; ::glim::gstring NAME (SIZE, NAME##Buf, false, 0); NAME
 
 namespace glim {
 
@@ -302,7 +304,7 @@ protected:
       return;
     }
     _meta = (_meta & ~CAPACITY_MASK) | (power << CAPACITY_OFFSET);
-    if (needsFreeing()) {
+    if (needsFreeing() && _buf != nullptr) {
       _buf = ::realloc (_buf, capacity());
       if (_buf == nullptr) throw std::runtime_error ("realloc failed");
     } else {
