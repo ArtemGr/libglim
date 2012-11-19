@@ -34,7 +34,7 @@ limitations under the License.
 /// Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
 #define C2GSTRING(CSTR) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) CSTR, false, sizeof (CSTR) - 1, true)))
 /// Usage: GSTRING_ON_STACK (buf, 64) << "foo" << "bar";
-#define GSTRING_ON_STACK(NAME, SIZE) char NAME##Buf[SIZE]; ::glim::gstring NAME (SIZE, NAME##Buf, false, 0); NAME
+#define GSTRING_ON_STACK(NAME, SIZE) char NAME##Buf[SIZE]; ::glim::gstring NAME (SIZE, NAME##Buf, false, 0); NAME.self()
 
 namespace glim {
 
@@ -291,6 +291,9 @@ public:
     return (char*) mret - (char*) _buf;
   }
   int32_t find (const char* str, int32_t pos = 0) const {return find (str, pos, strlen (str));}
+
+  // Helps to workaround the "statement has no effect" warning in `GSTRING_ON_STACK`.
+  gstring& self() {return *this;}
 
   /** Grow buffer to be at least `to` characters long. */
   void reserve (uint32_t to) {
