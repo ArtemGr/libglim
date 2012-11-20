@@ -77,11 +77,11 @@ class Curl {
    * Sets the majority of options for the http request.\n
    * NB: If `send` was used with a non-empty string then `http` will use `CURLOPT_UPLOAD`, setting http method to `PUT`.
    */
-  Curl& http (const char* url, int timeout = 20) {
+  Curl& http (const char* url, int timeoutSec = 20) {
     curl_easy_setopt (_curl, CURLOPT_URL, url);
     curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToGstring);
     curl_easy_setopt (_curl, CURLOPT_WRITEDATA, &_got);
-    curl_easy_setopt (_curl, CURLOPT_TIMEOUT, timeout);
+    curl_easy_setopt (_curl, CURLOPT_TIMEOUT, timeoutSec);
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
     curl_easy_setopt (_curl, CURLOPT_ERRORBUFFER, _errorBuf);
@@ -148,8 +148,8 @@ inline size_t curlReadFromGstring (void *ptr, size_t size, size_t nmemb, void *u
  * Example:
  *   std::string w3 = glim::curl2str ("http://www.w3.org/");
  */
-inline std::string curl2str (const char* url, int timeout = 20) {
-  return glim::Curl().http (url, timeout) .go().str();}
+inline std::string curl2str (const char* url, int timeoutSec = 20) {
+  return glim::Curl().http (url, timeoutSec) .go().str();}
 
 }
 
