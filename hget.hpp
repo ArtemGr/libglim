@@ -156,9 +156,9 @@ class hget {
    * \endcode
    * @param urls is a for-compatible container of strings (where string has methods `data` and `size`).
    */
-  template<typename URLS> void goUntilS (const URLS& urls, until_handler_t handler, int32_t timeoutSec = 20) {
+  template<typename URLS> void goUntilS (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
     std::vector<uri_t> parsedUrls;
-    for (auto& url: urls) {
+    for (auto&& url: urls) {
       // Copying to stack might be cheaper than malloc in c_str.
       int len = url.size(); char buf[len + 1]; memcpy (buf, url.data(), len); buf[len] = 0;
       parsedUrls.push_back (uri_t (evhttp_uri_parse (buf), evhttp_uri_free));
@@ -177,7 +177,7 @@ class hget {
    * \endcode
    * @param urls is a for-compatible container of C strings (const char*).
    */
-  template<typename URLS> void goUntilC (const URLS& urls, until_handler_t handler, int32_t timeoutSec = 20) {
+  template<typename URLS> void goUntilC (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
     std::vector<uri_t> parsedUrls;
     for (auto url: urls) parsedUrls.push_back (uri_t (evhttp_uri_parse (url), evhttp_uri_free));
     goUntil (parsedUrls, handler, timeoutSec);
