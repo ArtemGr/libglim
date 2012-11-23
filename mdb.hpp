@@ -94,7 +94,6 @@ struct Mdb {
     Mdb* _mdb;
     Transaction _txn;
     MDB_cursor* _cur;
-    //IteratorImpl(): _mdb (nullptr), _txn (nullptr, nullptr), _cur (nullptr) {}
     IteratorImpl (Mdb* mdb, Transaction&& txn, MDB_cursor* cur): _mdb (mdb), _txn (std::move (txn)), _cur (cur) {}
     ~IteratorImpl() {
       if (_cur) {::mdb_cursor_close (_cur); _cur = nullptr;}
@@ -183,7 +182,6 @@ struct Mdb {
   std::map<gstring, std::shared_ptr<Trigger>> _triggers;
 
   void setTrigger (std::shared_ptr<Trigger> trigger) {
-    // todo: in gcc 4.8.0 use emplace: http://gcc.gnu.org/bugzilla/show_bug.cgi?id=44436
     _triggers[trigger->getTriggerName()] = trigger;
   }
 
@@ -223,7 +221,7 @@ struct Mdb {
   }
  public:
 
-  /** Opends MDB environment and MDB database. */
+  /** Opens MDB environment and MDB database. */
   Mdb (const char* path, size_t maxSizeMb = 1024, const char* dbName = "main", uint8_t sync = 0, bool dup = true, mode_t mode = 0660) {
     MDB_env* env = 0; int rc = ::mdb_env_create (&env);
     if (rc) throw MdbEx (std::string ("mdb_env_create: ") + ::strerror (rc));
