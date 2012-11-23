@@ -47,6 +47,7 @@ template <typename V> inline void mdbDeserialize (const gstring& bytes, V& data)
   boost::archive::binary_iarchive ia (stream, boost::archive::no_header);
   ia >> data;
 }
+
 /** uint32_t keys are stored big-endian (network byte order) in order to be compatible with lexicographic ordering. */
 template <> inline void mdbSerialize<uint32_t> (gstring& bytes, const uint32_t& ui) {
   uint32_t nui = htonl (ui); bytes.append ((const char*) &nui, sizeof (uint32_t));}
@@ -54,6 +55,7 @@ template <> inline void mdbSerialize<uint32_t> (gstring& bytes, const uint32_t& 
 template <> inline void mdbDeserialize<uint32_t> (const gstring& bytes, uint32_t& ui) {
   if (bytes.size() != sizeof (uint32_t)) throw MdbEx ("Not uint32_t, wrong number of bytes");
   uint32_t nui = * (uint32_t*) bytes.data(); ui = ntohl (nui);}
+
 /** If the data is `gstring` then use the data's buffer directly, no copy. */
 template <> inline void mdbSerialize<gstring> (gstring& bytes, const gstring& data) {
   bytes = gstring (0, (void*) data.data(), false, data.length());}
