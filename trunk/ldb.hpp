@@ -34,7 +34,7 @@ limitations under the License.
 #include <sys/stat.h> // mkdir
 #include <sys/types.h> // mkdir
 
-//#include "gstring.hpp"
+#include "gstring.hpp"
 
 namespace glim {
 

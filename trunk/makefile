@@ -45,6 +45,7 @@ install:
 	cp hget.hpp ${INSTALL2}/
 	cp curl.hpp ${INSTALL2}/
 	cp mdb.hpp ${INSTALL2}/
+	cp ldb.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
