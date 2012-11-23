@@ -371,7 +371,7 @@ struct Mdb {
 
   static void test (Mdb& mdb) {
     mdb.add (std::string ("foo"), std::string ("bar"));
-    // NB: "MDB_DUPSORT doesn't allow duplicate duplicates" (Howard Chu, https://mail.google.com/mail/u/0/?shva=1#search/mdb/13a8911b9c0496c5)
+    // NB: "MDB_DUPSORT doesn't allow duplicate duplicates" (Howard Chu)
     mdb.add (std::string ("foo"), std::string ("bar"));
     mdb.add ((uint32_t) 123, 1);
     mdb.add ((uint32_t) 123, 2);
