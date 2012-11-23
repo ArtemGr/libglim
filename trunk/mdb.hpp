@@ -2,7 +2,7 @@
 #define _GLIM_MDB_HPP_INCLUDED
 
 /**
- * A C++ wrapper around MDB (http://highlandsun.com/hyc/mdb/).
+ * A C++ wrapper around MDB (http://www.symas.com/mdb/).
  * @code
 Copyright 2012 Kozarezov Artem Aleksandrovich
 
