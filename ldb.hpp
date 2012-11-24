@@ -33,6 +33,8 @@ limitations under the License.
 #include <arpa/inet.h> // htonl, ntohl
 #include <sys/stat.h> // mkdir
 #include <sys/types.h> // mkdir
+#include <string.h> // strerror
+#include <errno.h>
 
 #include "gstring.hpp"
 
@@ -147,23 +149,11 @@ struct Ldb {
   };
   Iterator begin() {return Iterator (this);}
   const Iterator end() {return Iterator (this, Iterator::EndIteratorFlag());}
-  /** Position the cursor at the first `key` record.\n
-   * The iterator increment will use `MDB_NEXT_DUP`, staying withing the `key`.\n
-   * See also the `all` method. */
-  template <typename K> Iterator values (const K& key) {
-    char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
-    gstring kbytes (sizeof (kbuf), kbuf, false, 0);
-    ldbSerialize (kbytes, key);
-    return Iterator (this, kbytes);
-  }
-  /** Range over the `key` values.\n
-   * See also the `all` method. */
-  template <typename K> boost::iterator_range<Iterator> valuesRange (const K& key) {return boost::iterator_range<Iterator> (values (key), end());}
 
   struct Trigger {
     virtual gstring getTriggerName() const {return C2GSTRING ("defaultTriggerName");};
-    virtual void add (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, leveldb::WriteBatch& batch) = 0;
-    virtual void erase (Ldb& ldb, void* key, gstring& kbytes, leveldb::WriteBatch& batch) = 0;
+    virtual void put (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, leveldb::WriteBatch& batch) = 0;
+    virtual void del (Ldb& ldb, void* key, gstring& kbytes, leveldb::WriteBatch& batch) = 0;
   };
   std::map<gstring, std::shared_ptr<Trigger>> _triggers;
 
@@ -173,9 +163,12 @@ struct Ldb {
 
  public:
 
+  Ldb() {}
+
   /** Opens Leveldb database. */
   Ldb (const char* path, leveldb::Options* options = nullptr, mode_t mode = 0770) {
-    ::mkdir (path, mode);
+    int rc = ::mkdir (path, mode);
+    if (rc && errno != EEXIST) throw LdbEx (std::string ("Can't create ") + path + ": " + ::strerror (errno));
     leveldb::DB* db;
     leveldb::Status status;
     if (options) {
@@ -201,7 +194,7 @@ struct Ldb {
     gstring vbytes (sizeof (vbuf), vbuf, false, 0);
     ldbSerialize (vbytes, value);
 
-    for (auto& trigger: _triggers) trigger.second->add (*this, (void*) &key, kbytes, (void*) &value, vbytes, batch);
+    for (auto& trigger: _triggers) trigger.second->put (*this, (void*) &key, kbytes, (void*) &value, vbytes, batch);
 
     batch.Put (leveldb::Slice (kbytes.data(), kbytes.size()), leveldb::Slice (vbytes.data(), vbytes.size()));
   }
@@ -240,9 +233,9 @@ struct Ldb {
     char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
     gstring kbytes (sizeof (kbuf), kbuf, false, 0);
     ldbSerialize (kbytes, key);
-    if (kbytes.empty()) throw LdbEx ("erase: key is empty");
+    if (kbytes.empty()) throw LdbEx ("del: key is empty");
 
-    for (auto& trigger: _triggers) trigger.second->erase (*this, (void*) &key, kbytes, batch);
+    for (auto& trigger: _triggers) trigger.second->del (*this, (void*) &key, kbytes, batch);
 
     batch.Delete (leveldb::Slice (kbytes.data(), kbytes.size()));
   }
@@ -250,7 +243,7 @@ struct Ldb {
     leveldb::WriteBatch batch;
     del (key, batch);
     leveldb::Status status (_db->Write (leveldb::WriteOptions(), &batch));
-    if (!status.ok()) throw LdbEx ("Ldb: erase: " + status.ToString());
+    if (!status.ok()) throw LdbEx ("Ldb: del: " + status.ToString());
   }
 
   static void test (Ldb& ldb) {
