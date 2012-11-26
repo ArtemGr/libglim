@@ -175,6 +175,11 @@ class hget {
    *     return -1.f; // No need to retry the request.
    *   });
    * \endcode
+   * Or with `std::array` instead of `boost::assign::list_of`: \code
+   *   std::array<const char*, 2> urls {{"http://server1/", "http://server2/"}};
+   *   hget.goUntilC (urls, [](hgot& got, hget::uri_t uri, int32_t num)->float {
+   *     return got.status != 200 && num < 10 ? 0.f : -1.f;});
+   * \endcode
    * @param urls is a for-compatible container of C strings (const char*).
    */
   template<typename URLS> void goUntilC (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
