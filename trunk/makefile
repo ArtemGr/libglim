@@ -8,7 +8,7 @@ all: test
 help:
 	@echo "make test\nmake install\nmake uninstall\nmake clean"
 
-test: test_sqlite test_gstring
+test: test_sqlite test_gstring test_runner
 
 test_sqlite: bin/test_sqlite
 	cp bin/test_sqlite /tmp/libglim_test_sqlite && chmod +x /tmp/libglim_test_sqlite && /tmp/libglim_test_sqlite && rm -f /tmp/libglim_test_sqlite
@@ -33,6 +33,13 @@ test_gstring: bin/test_gstring
 	chmod +x /tmp/libglim_test_gstring
 	/tmp/libglim_test_gstring
 	rm -f /tmp/libglim_test_gstring
+
+bin/test_runner: test_runner.cc runner.hpp curl.hpp
+	mkdir -p bin
+	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -levent_extra -levent_pthreads -lcurl
+
+test_runner: bin/test_runner
+	valgrind -q --leak-check=yes bin/test_runner
 
 install:
 	mkdir -p ${INSTALL2}/
