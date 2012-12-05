@@ -29,7 +29,7 @@ inline size_t curlReadFromGstring (void *ptr, size_t size, size_t nmemb, void *u
  */
 class Curl {
  protected:
-  Curl (const Curl&): _curl (NULL), _headers (NULL), _send (NULL), _sent (0) {} // No copying.
+  Curl (const Curl&): _curl (NULL), _headers (NULL), _send (NULL), _sent (0), _needs_cleanup (true) {} // No copying.
  public:
   struct PerformError: std::runtime_error {
     char _message[CURL_ERROR_SIZE+1];
@@ -49,17 +49,21 @@ class Curl {
   gstring _localSend;
   uint32_t _sent;
   gstring _got;
+  bool _needs_cleanup:1; ///< ~Curl will do `curl_easy_cleanup` if `true`.
   char _errorBuf[CURL_ERROR_SIZE];
 
-  Curl(): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0) {*_errorBuf = 0;}
-  /** Tries to reuse the given character buffer. */
-  Curl (size_t bufSize, char* buf): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0),
-    _got (bufSize, buf, false, 0) {*_errorBuf = 0;}
-  /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless). */
-  Curl (CURL* curl): _curl (curl), _headers (NULL), _send (NULL), _sent (0) {*_errorBuf = 0;}
+  /** @param cleanup can be turned off if the CURL is freed elsewhere. */
+  Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
+  /** Tries to reuse the given character buffer.
+   * @param cleanup can be turned off if the CURL is freed elsewhere. */
+  Curl (size_t bufSize, char* buf, bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _send (NULL), _sent (0),
+    _got (bufSize, buf, false, 0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
+  /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless).
+   * @param cleanup can be turned off if the CURL is freed elsewhere. */
+  Curl (CURL* curl, bool cleanup = true): _curl (curl), _headers (NULL), _send (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
   ~Curl(){
     if (_headers) {curl_slist_free_all (_headers); _headers = NULL;}
-    if (_curl) {curl_easy_cleanup (_curl); _curl = NULL;}
+    if (_curl) {if (_needs_cleanup) curl_easy_cleanup (_curl); _curl = NULL;}
   }
 
   Curl& send (gstring* text) {_send = text; _sent = 0; return *this;}
@@ -128,9 +132,9 @@ class Curl {
   std::string str() const {return _got.str();}
   gstring& gstr() {return _got;}
   const gstring& gstr() const {return _got;}
-  const char* c_str() {return _got.c_str();}
+  const char* c_str() const {return _got.c_str();}
 
-  long status() {
+  long status() const {
     long status; CURLcode err = curl_easy_getinfo (_curl, CURLINFO_RESPONSE_CODE, &status);
     if (err) throw GetinfoError (CURLINFO_RESPONSE_CODE, curl_easy_strerror (err));
     return status;}

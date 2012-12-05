@@ -102,8 +102,8 @@ public:
     restartTimer();
   }
   ~Runner() {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
-    if (_timer) {evtimer_del (_timer); _timer = NULL;}
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
+    if (_timer) {evtimer_del (_timer); event_free (_timer); _timer = NULL;}
     for (auto it = _handlers.begin(), end = _handlers.end(); it != end; ++it) {
       curl_multi_remove_handle (_curlm, it->first);
       curl_easy_cleanup (it->first);
@@ -112,30 +112,30 @@ public:
   }
   /** Wait for the operation to complete, then call the `handler`, then free the `curl`. */
   void multi (CURL* curl, handler_t handler) {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
     curl_multi_add_handle (_curlm, curl);
     _handlers[curl] = handler;
     runCurlUnderLock();
   }
   /** Register a new job to be run on the thread loop. */
   JobInfo& job (const gstring& name) {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
     return _jobs[name];
   }
   /** Register a new job to be run on the thread loop. */
   void schedule (const gstring& name, float pauseSec, job_t job) {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
     JobInfo& jobInfo = _jobs[name];
     jobInfo.job = job;
     jobInfo.pauseSec = pauseSec;
   }
   void removeJob (const gstring& name) {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
     _jobs.erase (name);
   }
   /** Invoked automatically from a libevent timer; can also be invoked manually. */
   void run() {
-    std::unique_lock<std::recursive_mutex> lock (_mutex);
+    std::lock_guard<std::recursive_mutex> lock (_mutex);
     runCurlUnderLock();
     // Run non-CURL jobs.
     struct timespec ct; clock_gettime (CLOCK_MONOTONIC, &ct);
