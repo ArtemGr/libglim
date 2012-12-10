@@ -284,9 +284,10 @@ public:
 
   /** Returns -1 if not found. */
   int32_t find (const char* str, int32_t pos, int32_t count) const {
-    const uint32_t hlen = length();
-    if (hlen == 0) return -1;
-    void* mret = memmem (_buf, hlen, str, count);
+    const int32_t hlen = (int32_t) length() - pos;
+    if (hlen <= 0) return -1;
+    char* haystack = (char*) _buf + pos;
+    void* mret = memmem (haystack, hlen, str, count);
     if (mret == 0) return -1;
     return (char*) mret - (char*) _buf;
   }
