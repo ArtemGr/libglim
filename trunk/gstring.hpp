@@ -164,7 +164,8 @@ public:
     if (this != &gstr) {
       uint32_t glen = gstr.length();
       uint32_t power = 0;
-      if (glen <= capacity()) {
+      uint32_t capacity = this->capacity();
+      if (glen <= capacity && capacity > 1) { // `capacity <= 1` means there is no _buf.
         // We reuse existing buffer. Keep capacity info.
         power = (_meta & CAPACITY_MASK) >> CAPACITY_OFFSET;
       } else {
