@@ -41,6 +41,13 @@ bin/test_runner: test_runner.cc runner.hpp curl.hpp
 test_runner: bin/test_runner
 	valgrind -q --leak-check=yes bin/test_runner
 
+bin/test_exception: test_exception.cc exception.hpp
+	mkdir -p bin
+	g++ $(CXXFLAGS) test_exception.cc -o bin/test_exception
+
+test_exception: bin/test_exception
+	valgrind -q --leak-check=yes bin/test_exception
+
 install:
 	mkdir -p ${INSTALL2}/
 	cp sqlite.hpp ${INSTALL2}/
@@ -53,6 +60,7 @@ install:
 	cp curl.hpp ${INSTALL2}/
 	cp mdb.hpp ${INSTALL2}/
 	cp ldb.hpp ${INSTALL2}/
+	cp exception.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
