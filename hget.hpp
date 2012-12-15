@@ -15,6 +15,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include "exception.hpp"
+
 namespace glim {
 
 /** HTTP results */
@@ -24,11 +26,13 @@ struct hgot {
   int32_t error = 0;
   struct evbuffer* body = 0;
   struct evhttp_request* req = 0;
-  size_t bodyLength() const {return evbuffer_get_length (body);}
+  size_t bodyLength() const {return body ? evbuffer_get_length (body) : 0;}
   /** Warning: the string is NOT zero-terminated. */
-  const char* bodyData() {return (const char*) evbuffer_pullup (body, -1);}
+  const char* bodyData() {return body ? (const char*) evbuffer_pullup (body, -1) : "";}
 #ifdef _GSTRING_INCLUDED
-  glim::gstring gbody() {return glim::gstring (0, evbuffer_pullup (body, -1), false, evbuffer_get_length (body));}
+  glim::gstring gbody() {
+    if (!body) return glim::gstring();
+    return glim::gstring (0, evbuffer_pullup (body, -1), false, evbuffer_get_length (body));}
 #endif
 };
 
@@ -161,7 +165,9 @@ class hget {
     for (auto&& url: urls) {
       // Copying to stack might be cheaper than malloc in c_str.
       int len = url.size(); char buf[len + 1]; memcpy (buf, url.data(), len); buf[len] = 0;
-      parsedUrls.push_back (uri_t (evhttp_uri_parse (buf), evhttp_uri_free));
+      struct evhttp_uri* uri = evhttp_uri_parse (buf);
+      if (!uri) GTHROW (std::string ("!evhttp_uri_parse: ") + buf);
+      parsedUrls.push_back (uri_t (uri, evhttp_uri_free));
     }
     goUntil (parsedUrls, handler, timeoutSec);
   }
@@ -184,7 +190,11 @@ class hget {
    */
   template<typename URLS> void goUntilC (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
     std::vector<uri_t> parsedUrls;
-    for (auto url: urls) parsedUrls.push_back (uri_t (evhttp_uri_parse (url), evhttp_uri_free));
+    for (auto url: urls) {
+      struct evhttp_uri* uri = evhttp_uri_parse (url);
+      if (!uri) GTHROW (std::string ("Can't parse url: ") + url);
+      parsedUrls.push_back (uri_t (uri, evhttp_uri_free));
+    }
     goUntil (parsedUrls, handler, timeoutSec);
   }
 };
