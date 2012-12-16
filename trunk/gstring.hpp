@@ -31,6 +31,8 @@ limitations under the License.
 #include <iostream>
 #include <iterator>
 
+#include "exception.hpp"
+
 /// Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
 #define C2GSTRING(CSTR) (static_cast<const ::glim::gstring> (::glim::gstring (0, (void*) CSTR, false, sizeof (CSTR) - 1, true)))
 /// Usage: GSTRING_ON_STACK (buf, 64) << "foo" << "bar";
@@ -98,7 +100,7 @@ public:
    *            This is useful for wrapping C string literals.
    */
   explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length, bool ref = false) {
-    if (ref && free) throw std::runtime_error ("gstring: ref && free"); // Shared buffer must not be freed by gstring.
+    if (ref && free) GTHROW ("gstring: ref && free"); // Shared buffer must not be freed by gstring.
     uint32_t power = 0; while (((uint32_t) 1 << (power + 1)) <= bufSize) ++power;
     _meta = ((uint32_t) free << FREE_OFFSET) |
             ((uint32_t) ref << REF_OFFSET) |
@@ -147,7 +149,7 @@ public:
         _meta = gstr._meta; _buf = gstr._buf;
       } else {
         _buf = ::malloc (glen);
-        if (!_buf) throw std::runtime_error ("!malloc");
+        if (!_buf) GTHROW ("!malloc");
         ::memcpy (_buf, gstr._buf, glen);
         _meta = (uint32_t) FREE_FLAG |
                 (glen & LENGTH_MASK);
@@ -175,7 +177,7 @@ public:
           return *this;
         }
         _buf = ::malloc (glen);
-        if (_buf == nullptr) throw std::runtime_error ("malloc failed");
+        if (_buf == nullptr) GTHROW ("malloc failed");
       }
       ::memcpy (_buf, gstr._buf, glen);
       _meta = (uint32_t) FREE_FLAG |
@@ -303,6 +305,7 @@ public:
     if (((uint32_t) 1 << power) < to) {
       ++power;
       while (((uint32_t) 1 << power) < to) ++power;
+      if (power > 24) GTHROW ("gstring too large: " + std::to_string (to));
     } else if (power) {
       // No need to grow.
       return;
@@ -310,11 +313,11 @@ public:
     _meta = (_meta & ~CAPACITY_MASK) | (power << CAPACITY_OFFSET);
     if (needsFreeing() && _buf != nullptr) {
       _buf = ::realloc (_buf, capacity());
-      if (_buf == nullptr) throw std::runtime_error ("realloc failed");
+      if (_buf == nullptr) GTHROW ("realloc failed");
     } else {
       const char* oldBuf = (const char*) _buf;
       _buf = ::malloc (capacity());
-      if (_buf == nullptr) throw std::runtime_error ("malloc failed");
+      if (_buf == nullptr) GTHROW ("malloc failed");
       if (oldBuf != nullptr) ::memcpy (_buf, oldBuf, length());
       _meta |= FREE_FLAG;
     }
@@ -376,15 +379,15 @@ public:
   /// If parsing was successfull, then `after` is set to point after the parsed netstring.
   gstring netstringAt (uint32_t pos, uint32_t* after = nullptr) const {
     const uint32_t len = length(); char* buf = (char*) _buf;
-    if (buf == nullptr) throw std::runtime_error ("gstring: netstringAt: nullptr");
+    if (buf == nullptr) GTHROW ("gstring: netstringAt: nullptr");
     uint32_t next = pos;
     while (next < len && buf[next] >= '0' && buf[next] <= '9') ++next;
-    if (next >= len || buf[next] != ':' || next - pos > 10) throw std::runtime_error ("gstring: netstringAt: no header");
+    if (next >= len || buf[next] != ':' || next - pos > 10) GTHROW ("gstring: netstringAt: no header");
     char* endptr = 0;
     long nlen = ::strtol (buf + pos, &endptr, 10);
-    if (endptr != buf + next) throw std::runtime_error ("gstring: netstringAt: unexpected header end");
+    if (endptr != buf + next) GTHROW ("gstring: netstringAt: unexpected header end");
     pos = next + 1; next = pos + nlen;
-    if (next >= len || buf[next] != ',') throw std::runtime_error ("gstring: netstringAt: no body");
+    if (next >= len || buf[next] != ',') GTHROW ("gstring: netstringAt: no body");
     if (after) *after = next + 1;
     return gstring (0, buf + pos, false, next - pos);
   }
@@ -392,11 +395,11 @@ public:
   /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
   long intAt (uint32_t pos, uint32_t* after = nullptr, int base = 10) const {
     const uint32_t len = length(); char* buf = (char*) _buf;
-    if (pos >= len || buf == nullptr) throw std::runtime_error ("gstring: intAt: pos >= len");
+    if (pos >= len || buf == nullptr) GTHROW ("gstring: intAt: pos >= len");
     char* endptr = 0;
     long lv = ::strtol (buf + pos, &endptr, base);
     uint32_t next = endptr - buf;
-    if (next >= len) throw std::runtime_error ("gstring: intAt: endptr >= len");
+    if (next >= len) GTHROW ("gstring: intAt: endptr >= len");
     if (after) *after = next;
     return lv;
   }
@@ -405,16 +408,16 @@ public:
   /// Throws an exception if the input is not a well-formed netstring.
   gstring& readNetstring (std::istream& stream) {
     int32_t nlen; stream >> nlen;
-    if (!stream.good() || nlen < 0) throw std::runtime_error ("!netstring");
+    if (!stream.good() || nlen < 0) GTHROW ("!netstring");
     int ch = stream.get();
-    if (!stream.good() || ch != ':') throw std::runtime_error ("!netstring");
+    if (!stream.good() || ch != ':') GTHROW ("!netstring");
     uint32_t glen = length();
     const uint32_t cap = capacity();
     if (cap < glen + nlen || cap <= 1) reserve (glen + nlen);
     stream.read ((char*) _buf + glen, nlen);
-    if (!stream.good()) throw std::runtime_error ("!netstring");
+    if (!stream.good()) GTHROW ("!netstring");
     ch = stream.get();
-    if (ch != ',') throw std::runtime_error ("!netstring");
+    if (ch != ',') GTHROW ("!netstring");
     setLength (glen + nlen);
     return *this;
   }
