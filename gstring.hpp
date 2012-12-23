@@ -212,7 +212,7 @@ public:
     // c_str should work even for const gstring's, otherwise it's too much of a pain.
     gstring* mut = const_cast<gstring*> (this);
     mut->append (0);
-    mut->setLength (len);
+    mut->length (len);
     return (const char*) _buf;
   }
   bool equals (const char* cstr) const {
@@ -323,15 +323,17 @@ public:
     }
   }
 
-protected:
-  friend class gstring_stream;
-  void setLength (uint32_t len) {
+  /** Length setter. Useful when you manually write into the buffer or to cut the string. */
+  void length (uint32_t len) {
     _meta = (_meta & ~LENGTH_MASK) | (len & LENGTH_MASK);
   }
+
+protected:
+  friend class gstring_stream;
   void append64 (int64_t iv, int bytes = 24) {
     uint32_t pos = length();
     if (capacity() < pos + bytes) reserve (pos + bytes);
-    setLength (itoa ((char*) _buf + pos, iv, 10) - (char*) _buf);
+    length (itoa ((char*) _buf + pos, iv, 10) - (char*) _buf);
   }
 public:
   void append (char ch) {
@@ -339,7 +341,7 @@ public:
     const uint32_t cap = capacity();
     if (pos >= cap || cap <= 1) reserve (pos + 1);
     ((char*)_buf)[pos] = ch;
-    setLength (++pos);
+    length (++pos);
   }
   void append (const char* cstr, uint32_t clen) {
     uint32_t len = length();
@@ -347,7 +349,7 @@ public:
     const uint32_t cap = capacity();
     if (need > cap || cap <= 1) reserve (need);
     ::memcpy ((char*) _buf + len, cstr, clen);
-    setLength (need);
+    length (need);
   }
   gstring& operator << (const gstring& gs) {append (gs.data(), gs.length()); return *this;}
   gstring& operator << (const std::string& str) {append (str.data(), str.length()); return *this;}
@@ -418,12 +420,12 @@ public:
     if (!stream.good()) GTHROW ("!netstring");
     ch = stream.get();
     if (ch != ',') GTHROW ("!netstring");
-    setLength (glen + nlen);
+    length (glen + nlen);
     return *this;
   }
 
   /// Set length to 0. `_buf` not changed.
-  gstring& clear() {setLength (0); return *this;}
+  gstring& clear() {length (0); return *this;}
 
   /// Removes `count` characters starting at `pos`.
   gstring& erase (uint32_t pos, uint32_t count = 1) {
@@ -433,7 +435,7 @@ public:
     uint32_t len = length();
     const char* end = buf + len;
     if (pt2 <= end) {
-      setLength (len - count);
+      length (len - count);
       ::memmove ((void*) pt1, (void*) pt2, end - pt2);
     }
     return *this;
