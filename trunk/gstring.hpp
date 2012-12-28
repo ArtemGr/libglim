@@ -204,16 +204,11 @@ public:
   std::string str() const {return std::string ((const char*) _buf, size());}
   /// NB: might move the string to a new buffer.
   const char* c_str() const {
-    uint32_t len = length();
-    if (len == 0) return "";
+    uint32_t len = length(); if (len == 0) return "";
     uint32_t cap = capacity();
-    const char* buf = (const char*) _buf;
-    if (len < cap && buf[len] == 0) return buf;
     // c_str should work even for const gstring's, otherwise it's too much of a pain.
-    gstring* mut = const_cast<gstring*> (this);
-    mut->append (0);
-    mut->length (len);
-    return (const char*) _buf;
+    if (cap < len + 1) const_cast<gstring*> (this) ->reserve (len + 1);
+    char* buf = (char*) _buf; buf[len] = 0; return buf;
   }
   bool equals (const char* cstr) const {
     const char* cstr_; uint32_t clen_;
@@ -500,6 +495,7 @@ namespace std {
   template <> struct hash<glim::gstring> {
     size_t operator()(const glim::gstring& gs) const {
       // cf. http://stackoverflow.com/questions/7666509/hash-function-for-string
+      // Would be nice to use https://131002.net/siphash/ here.
       uint32_t hash = 5381;
       uint32_t len = gs.length();
       if (len) {
