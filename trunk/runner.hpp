@@ -103,9 +103,11 @@ protected:
     tv = {0, nextInMicro};
     evtimer_add (_timer, &tv);
   }
-  static void evTimerCB (evutil_socket_t, short, void* runner) {
+  static void evTimerCB (evutil_socket_t, short, void* runner_) {
     //std::cout << __LINE__ << ',' << ms() << ": evTimerCB" << std::endl;
-    ((Runner*) runner)->run();
+    Runner* runner = (Runner*) runner_;
+    runner->callCurlWithTimeout();
+    runner->run();
   }
   /** event_callback_fn: There is an activity on a socket we are monitoring for CURL. */
   static void evSocketCB (evutil_socket_t sock, short events, void* runner_) {
