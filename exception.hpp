@@ -10,7 +10,7 @@
 /** Throws a `::glim::Exception` derived exception `name` passing the current file and line into constructor. */
 #define GNTHROW(name, message) throw name (message, __FILE__, __LINE__)
 /** Helps defining new `::glim::Exception`-based exceptions.\n
- * Having a names exception might be useful fo catch  */
+ * Named exceptions might be useful in a debugger. */
 #define G_DEFINE_EXCEPTION(name) \
   struct name: public ::glim::Exception { \
     name (const ::std::string& message, const char* file, int line): ::glim::Exception (message, file, line) {} \

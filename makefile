@@ -2,6 +2,7 @@
 PREFIX = /usr/local
 INSTALL2 = ${PREFIX}/include/glim
 CXXFLAGS = -std=c++0x -Wall -O2 -ggdb
+CXXFLAGS += -I/usr/local/libevent/include -L/usr/local/libevent/lib
 
 all: test
 
@@ -36,7 +37,7 @@ test_gstring: bin/test_gstring
 
 bin/test_runner: test_runner.cc runner.hpp curl.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -levent_extra -levent_pthreads -lcurl
+	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -levent -levent_pthreads -lcurl
 
 test_runner: bin/test_runner
 	valgrind -q --leak-check=yes bin/test_runner
