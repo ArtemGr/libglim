@@ -1,3 +1,5 @@
+#define _GLIM_EXCEPTIONS_CODE
+#define _GLIM_ALL_EXCEPTIONS_CODE
 #include "exception.hpp"
 #include <iostream>
 #include <typeinfo>
@@ -32,9 +34,20 @@ static void testThrowLine() {
   assert (message == "bar");
 }
 
+static void testAllExceptionsHack() {
+  std::string traceBuf;
+  glim::ExceptionHandler traceExceptions (glim::Exception::Options::HANDLE_ALL, glim::ExceptionHandler::backtrace, &traceBuf);
+  try {
+    throw "catch me"; // Catched by `_GLIM_ALL_EXCEPTIONS_CODE` and handled with `glim::ExceptionControl::backtrace`.
+  } catch (const char* skip) {}
+  std::cout << std::endl << traceBuf << std::endl;
+  assert (traceBuf.size());
+}
+
 int main () {
   std::cout << "Testing exception.hpp ... " << std::flush;
   testThrowLine();
+  testAllExceptionsHack();
   std::cout << "pass." << std::endl;
   return 0;
 }
