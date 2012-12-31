@@ -44,7 +44,7 @@ test_runner: bin/test_runner
 
 bin/test_exception: test_exception.cc exception.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_exception.cc -o bin/test_exception -ldl
+	g++ $(CXXFLAGS) test_exception.cc -o bin/test_exception -ldl -rdynamic
 
 test_exception: bin/test_exception
 	valgrind -q --leak-check=yes bin/test_exception
