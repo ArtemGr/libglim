@@ -166,7 +166,6 @@ public:
 /**
  * Special handler for ALL exceptions. Usage:
  * 1) In the `main` module inject this code with:
- *   #define _GLIM_EXCEPTIONS_CODE
  *   #define _GLIM_ALL_EXCEPTIONS_CODE
  *   #include <glim/exception.hpp>
  * 2) Link with "-ldl" (for `dlsym`).
