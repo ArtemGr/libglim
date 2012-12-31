@@ -18,22 +18,16 @@
 
 namespace glim {
 
-// Option to stack-trace *all* exceptions? http://stackoverflow.com/a/11674810/257568
 // Ideas:
 // RAII control via thread-local integer (with bits): option to capture stack trace (printed on "what()")
 // see http://stacktrace.svn.sourceforge.net/viewvc/stacktrace/stacktrace/call_stack_gcc.cpp?revision=40&view=markup
-// RAII bit: option to apply addr2line (applied from "what()")
-// http://stackoverflow.com/a/4611112/257568
-// RAII bit: option to *log* an exception when it is created
-// global log handler (std::function?) *and* RAII thread-local handler (C function pointer) in case one needs to override
-// RAII option to log exception with VALGRIND (with optional trace)
-// RAII option to do a user-specific action upon exception (C function pointer)
-// RAII option to log thread id and *pause* the thread in exception constructor (user can attach GDB and investigate)
+// A handler to log exception with VALGRIND (with optional trace)
+// A handler to log thread id and *pause* the thread in exception constructor (user can attach GDB and investigate)
 // (or we might call an empty function: "I once used something similar,
 //  but with an empty function debug_breakpoint. When debugging, I simply entered "bre debug_breakpoint"
 //  at the gdb prompt - no asembler needed (compile debug_breakpoint in a separate compilation unit to avoid having the call optimized away)."
 //  - http://stackoverflow.com/a/4720403/257568)
-// RAII option to call a debugger? (see: http://stackoverflow.com/a/4732119/257568)
+// A handler to call a debugger? (see: http://stackoverflow.com/a/4732119/257568)
 
 class Exception: public std::runtime_error {
  protected:
@@ -47,8 +41,21 @@ class Exception: public std::runtime_error {
     return OPTIONS;
   }
   enum Options: uint32_t {
-    PLAIN_WHAT = 1 ///< Pass `what` as is, do not add any information to it.
+    PLAIN_WHAT = 1, ///< Pass `what` as is, do not add any information to it.
+    HANDLE_ALL = 1 << 1
   };
+
+  typedef void (*handler_fn)(void*);
+  /** The pointer to the thread-local exception handler. */
+  inline static handler_fn* handler() {
+    static __thread handler_fn HANDLER = nullptr;
+    return &HANDLER;
+  }
+  /** The pointer to the thread-local argument for the exception handler. */
+  inline static void** handlerArg() {
+    static __thread void* HANDLER_ARG = nullptr;
+    return &HANDLER_ARG;
+  }
 
   Exception (const std::string& message): std::runtime_error (message), _file (0), _line (-1), _options (options()) {}
   Exception (const std::string& message, const char* file, int32_t line): std::runtime_error (message), _file (file), _line (line), _options (options()) {}
@@ -86,6 +93,92 @@ class ExceptionControl {
   }
 };
 
+class ExceptionHandler {
+protected:
+ uint32_t _savedOptions;
+ Exception::handler_fn _savedHandler;
+ void* _savedHandlerArg;
+public:
+ ExceptionHandler (Exception::Options newOptions, Exception::handler_fn handler, void* handlerArg) {
+   _savedOptions = Exception::options(); Exception::options() = newOptions;
+   _savedHandler = *Exception::handler(); *Exception::handler() = handler;
+   _savedHandlerArg = *Exception::handlerArg(); *Exception::handlerArg() = handlerArg;
+ }
+ ~ExceptionHandler() {
+   Exception::options() = _savedOptions;
+   *Exception::handler() = _savedHandler;
+   *Exception::handlerArg() = _savedHandlerArg;
+ }
+
+  /** Capture backtrace.\n
+   * If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
+   * otherwise printed to write(2). */
+  static void backtrace (void* stdStringPtr);
+};
+
 } // namespace glim
 
 #endif // _GLIM_EXCEPTION_HPP_INCLUDED
+
+/**
+ * Special handler for ALL exceptions. Usage:
+ * 1) In the `main` module inject this code with:
+ *   #define _GLIM_EXCEPTIONS_CODE
+ *   #define _GLIM_ALL_EXCEPTIONS_CODE
+ *   #include <glim/exception.hpp>
+ * 2) Link with "-ldl" (for `dlsym`).
+ * 3) Use the ExceptionHandler to enable special behaviour in the current thread:
+ *   glim::ExceptionHandler traceExceptions (glim::Exception::Options::HANDLE_ALL, glim::ExceptionHandler::backtrace, nullptr);
+ *
+ * About handing all exceptions see:
+ *   http://stackoverflow.com/a/11674810/257568
+ *   http://blog.sjinks.pro/c-cpp/969-track-uncaught-exceptions/
+ */
+#ifdef _GLIM_ALL_EXCEPTIONS_CODE
+
+#include <dlfcn.h> // dlsym
+
+typedef void(*cxa_throw_type)(void*, void*, void(*)(void*)); // Tested with GCC 4.7.
+static cxa_throw_type NATIVE_CXA_THROW = 0;
+
+extern "C" void __cxa_throw (void* thrown_exception, void* tinfo, void (*dest)(void*)) {
+  if (!NATIVE_CXA_THROW) NATIVE_CXA_THROW = reinterpret_cast<cxa_throw_type> (::dlsym (RTLD_NEXT, "__cxa_throw"));
+  if (!NATIVE_CXA_THROW) ::std::terminate();
+
+  using namespace glim;
+  uint32_t options = Exception::options();
+  if (options & Exception::Options::HANDLE_ALL) {
+    Exception::handler_fn handler = *Exception::handler();
+    if (handler) handler (*Exception::handlerArg());
+  }
+
+  NATIVE_CXA_THROW (thrown_exception, tinfo, dest);
+}
+
+#endif // _GLIM_ALL_EXCEPTIONS_CODE
+
+#ifdef _GLIM_EXCEPTIONS_CODE
+
+#include <execinfo.h> // backtrace; http://www.gnu.org/software/libc/manual/html_node/Backtraces.html
+#include <unistd.h> // write
+
+// todo: A helper converting backtrace to addr2line invocation, e.g.
+// bin/test_exception() [0x4020cc];bin/test_exception(__cxa_throw+0x47) [0x402277];bin/test_exception() [0x401c06];/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xfd) [0x57f0ead];bin/test_exception() [0x401fd1];
+// should be converted to
+// addr2line -pifCa -e bin/test_exception 0x4020cc 0x402277 0x401c06 0x57f0ead 0x401fd1
+
+/** Capture backtrace.\n
+ * If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
+ * otherwise printed to write(2). */
+void glim::ExceptionHandler::backtrace (void* stdStringPtr) {
+  const int arraySize = 10; void *array[arraySize];
+  int got = ::backtrace (array, arraySize);
+  if (stdStringPtr) {
+    std::string* out = (std::string*) stdStringPtr;
+    char **strings = ::backtrace_symbols (array, got);
+    for (int tn = 0; tn < got; ++tn) {out->append (strings[tn]); out->append (1, ';');}
+    ::free (strings);
+  } else ::backtrace_symbols_fd (array, got, 2);
+}
+
+#endif // _GLIM_EXCEPTIONS_CODE
