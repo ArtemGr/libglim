@@ -1,14 +1,17 @@
 #ifndef _GLIM_EXCEPTION_HPP_INCLUDED
 #define _GLIM_EXCEPTION_HPP_INCLUDED
 
+// Unfortunately this file is not entirely header-only
+// because the thread-local static variables aren't reliable across shared libraries in GCC 4.7.2.
+// Include the code into the `main` module with:
+// #define _GLIM_EXCEPTION_CODE
+// #include <glim/exception.hpp>
+
 #include <stdexcept>
 #include <string>
 #include <stdint.h>
+#include <stdlib.h> // free
 #include <unistd.h> // write
-
-#if defined(__GNUC__)
-# include <execinfo.h> // backtrace; http://www.gnu.org/software/libc/manual/html_node/Backtraces.html
-#endif
 
 /** Throws `::glim::Exception` passing the current file and line into constructor. */
 #define GTHROW(message) throw ::glim::Exception (message, __FILE__, __LINE__)
@@ -39,22 +42,12 @@ namespace glim {
 // should be converted to
 // addr2line -pifCa -e bin/test_exception 0x4020cc 0x402277 0x401c06 0x57f0ead 0x401fd1
 
-/** If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
- * otherwise printed to write(2). */
-inline void captureBacktrace (void* stdStringPtr) {
-#if defined(__GNUC__) || defined (_EXECINFO_H) || defined (_EXECINFO_H_)
-  const int arraySize = 10; void *array[arraySize];
-  int got = ::backtrace (array, arraySize);
-  if (stdStringPtr) {
-    std::string* out = (std::string*) stdStringPtr;
-    char **strings = ::backtrace_symbols (array, got);
-    for (int tn = 0; tn < got; ++tn) {out->append (strings[tn]); out->append (1, ';');}
-    ::free (strings);
-  } else ::backtrace_symbols_fd (array, got, 2);
-#else
-# warning captureBacktrace: I do not know how to capture backtrace there. Patches welcome.
-#endif
-}
+void captureBacktrace (void* stdStringPtr);
+
+extern __thread uint32_t EXCEPTION_OPTIONS;
+typedef void (*exception_handler_fn)(void*);
+extern __thread exception_handler_fn EXCEPTION_HANDLER;
+extern __thread void* EXCEPTION_HANDLER_ARG;
 
 class Exception: public std::runtime_error {
  protected:
@@ -85,8 +78,8 @@ class Exception: public std::runtime_error {
  public:
   /** The reference to the thread-local options. */
   inline static uint32_t& options() {
-    static __thread uint32_t OPTIONS = 0;
-    return OPTIONS;
+    //static __thread uint32_t EXCEPTION_OPTIONS = 0; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    return EXCEPTION_OPTIONS;
   }
   enum Options: uint32_t {
     PLAIN_WHAT = 1, ///< Pass `what` as is, do not add any information to it.
@@ -94,16 +87,15 @@ class Exception: public std::runtime_error {
     CAPTURE_TRACE = 1 << 2 ///< Append a stack trace into the `Exception::_what` (with the help of the `captureBacktrace`).
   };
 
-  typedef void (*handler_fn)(void*);
   /** The pointer to the thread-local exception handler. */
-  inline static handler_fn* handler() {
-    static __thread handler_fn HANDLER = nullptr;
-    return &HANDLER;
+  inline static exception_handler_fn* handler() {
+    //static __thread handler_fn EXCEPTIONS_HANDLER = nullptr; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    return &EXCEPTION_HANDLER;
   }
   /** The pointer to the thread-local argument for the exception handler. */
   inline static void** handlerArg() {
-    static __thread void* HANDLER_ARG = nullptr;
-    return &HANDLER_ARG;
+    //static __thread void* EXCEPTION_HANDLER_ARG = nullptr; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    return &EXCEPTION_HANDLER_ARG;
   }
 
   Exception (const std::string& message):
@@ -112,6 +104,7 @@ class Exception: public std::runtime_error {
   Exception (const std::string& message, const char* file, int32_t line):
     std::runtime_error (message), _file (file), _line (line), _options (options()) {
     capture();}
+  ~Exception() throw() {}
   virtual const char* what() const throw() {
     if (_options & PLAIN_WHAT) return std::runtime_error::what();
     std::string& buf = const_cast<std::string&> (_what);
@@ -143,25 +136,59 @@ class ExceptionControl {
 
 class ExceptionHandler {
 protected:
- uint32_t _savedOptions;
- Exception::handler_fn _savedHandler;
- void* _savedHandlerArg;
+  uint32_t _savedOptions;
+  exception_handler_fn _savedHandler;
+  void* _savedHandlerArg;
 public:
- ExceptionHandler (Exception::Options newOptions, Exception::handler_fn handler, void* handlerArg) {
-   _savedOptions = Exception::options(); Exception::options() = newOptions;
-   _savedHandler = *Exception::handler(); *Exception::handler() = handler;
-   _savedHandlerArg = *Exception::handlerArg(); *Exception::handlerArg() = handlerArg;
- }
- ~ExceptionHandler() {
-   Exception::options() = _savedOptions;
-   *Exception::handler() = _savedHandler;
-   *Exception::handlerArg() = _savedHandlerArg;
- }
+  ExceptionHandler (Exception::Options newOptions, exception_handler_fn handler, void* handlerArg) {
+    uint32_t& options = Exception::options(); _savedOptions = options; options = newOptions;
+    exception_handler_fn* handler_ = Exception::handler(); _savedHandler = *handler_; *handler_ = handler;
+    void** handlerArg_ = Exception::handlerArg(); _savedHandlerArg = *handlerArg_; *handlerArg_ = handlerArg;
+  }
+  ~ExceptionHandler() {
+    Exception::options() = _savedOptions;
+    *Exception::handler() = _savedHandler;
+    *Exception::handlerArg() = _savedHandlerArg;
+  }
 };
 
 } // namespace glim
 
 #endif // _GLIM_EXCEPTION_HPP_INCLUDED
+
+#ifdef _GLIM_EXCEPTION_CODE
+
+#if defined(__GNUC__)
+# include <execinfo.h> // backtrace; http://www.gnu.org/software/libc/manual/html_node/Backtraces.html
+#endif
+
+namespace glim {
+
+__thread uint32_t EXCEPTION_OPTIONS = 0;
+__thread exception_handler_fn EXCEPTION_HANDLER = nullptr;
+__thread void* EXCEPTION_HANDLER_ARG = nullptr;
+
+/** If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
+ * otherwise printed to write(2). */
+void captureBacktrace (void* stdStringPtr) {
+#if defined(__GNUC__) || defined (_EXECINFO_H) || defined (_EXECINFO_H_)
+  const int arraySize = 10; void *array[arraySize];
+  int got = ::backtrace (array, arraySize);
+  if (stdStringPtr) {
+    std::string* out = (std::string*) stdStringPtr;
+    char **strings = ::backtrace_symbols (array, got);
+    for (int tn = 0; tn < got; ++tn) {out->append (strings[tn]); out->append (1, ';');}
+    ::free (strings);
+  } else ::backtrace_symbols_fd (array, got, 2);
+#else
+# warning captureBacktrace: I do not know how to capture backtrace there. Patches welcome.
+#endif
+}
+
+} // namespace glim
+
+#undef _GLIM_EXCEPTION_CODE
+#endif // _GLIM_EXCEPTION_CODE
 
 /**
  * Special handler for ALL exceptions. Usage:
@@ -190,11 +217,12 @@ extern "C" void __cxa_throw (void* thrown_exception, void* tinfo, void (*dest)(v
   using namespace glim;
   uint32_t options = Exception::options();
   if (options & Exception::Options::HANDLE_ALL) {
-    Exception::handler_fn handler = *Exception::handler();
+    exception_handler_fn handler = *Exception::handler();
     if (handler) handler (*Exception::handlerArg());
   }
 
   NATIVE_CXA_THROW (thrown_exception, tinfo, dest);
 }
 
+#undef _GLIM_ALL_EXCEPTIONS_CODE
 #endif // _GLIM_ALL_EXCEPTIONS_CODE
