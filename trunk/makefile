@@ -37,14 +37,14 @@ test_gstring: bin/test_gstring
 
 bin/test_runner: test_runner.cc runner.hpp curl.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -levent -levent_pthreads -lcurl
+	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_runner.cc -o bin/test_runner -levent -levent_pthreads -lcurl
 
 test_runner: bin/test_runner
 	valgrind -q --leak-check=yes bin/test_runner
 
 bin/test_exception: test_exception.cc exception.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_exception.cc -o bin/test_exception -ldl -rdynamic
+	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_exception.cc -o bin/test_exception -ldl -rdynamic
 
 test_exception: bin/test_exception
 	valgrind -q --leak-check=yes bin/test_exception
