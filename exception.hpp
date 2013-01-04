@@ -41,6 +41,19 @@ namespace glim {
 // bin/test_exception() [0x4020cc];bin/test_exception(__cxa_throw+0x47) [0x402277];bin/test_exception() [0x401c06];/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xfd) [0x57f0ead];bin/test_exception() [0x401fd1];
 // should be converted to
 // addr2line -pifCa -e bin/test_exception 0x4020cc 0x402277 0x401c06 0x57f0ead 0x401fd1
+//
+// The helper should read the shared library addresses from /proc/.../map and generate separate addr2line invocations
+// for groups of addresses inside the same shared library.
+//
+// Shared libraries (http://stackoverflow.com/a/7557756/257568).
+// Example, backtrace: /usr/local/lib/libfrople.so(_ZN5mongo14BSONObjBuilder8appendAsERKNS_11BSONElementERKNS_10StringDataE+0x1ca) [0x2aef5b45eb8a]
+// cat /proc/23630/maps | grep libfrople
+//   -> 2aef5b363000-2aef5b53e000
+// 0x2aef5b45eb8a - 2aef5b363000 = FBB8A
+// addr2line -pifCa -e /usr/local/lib/libfrople.so 0xFBB8A
+//
+// cat /proc/`pidof FropleAndImg2`/maps | grep libfrople
+// addr2line -pifCa -e /usr/local/lib/libfrople.so `perl -e 'printf ("%x", 0x2aef5b45eb8a - 0x2aef5b363000)'`
 
 void captureBacktrace (void* stdStringPtr);
 
@@ -67,7 +80,7 @@ class Exception: public std::runtime_error {
 
   /** Append a stack trace to `_what`. */
   void capture() {
-    if (options() & CAPTURE_TRACE) {
+    if (_options & CAPTURE_TRACE) {
       appendLine (_what);
       _what += "[at ";
       captureBacktrace (&_what);
