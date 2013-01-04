@@ -49,6 +49,12 @@ bin/test_exception: test_exception.cc exception.hpp
 test_exception: bin/test_exception
 	valgrind -q --leak-check=yes bin/test_exception
 
+test_ldb: test_ldb.cc ldb.hpp
+	mkdir -p bin
+	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_ldb.cc -o bin/test_ldb \
+	  -lleveldb -lboost_serialization-mt -lboost_filesystem-mt -lboost_system-mt
+	valgrind -q --leak-check=yes bin/test_ldb
+
 install:
 	mkdir -p ${INSTALL2}/
 	cp sqlite.hpp ${INSTALL2}/
