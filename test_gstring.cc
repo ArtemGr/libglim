@@ -1,4 +1,3 @@
-
 #include "gstring.hpp"
 using glim::gstring;
 #include <assert.h>

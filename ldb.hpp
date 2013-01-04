@@ -21,6 +21,9 @@ limitations under the License.
  * @file
  */
 
+#include <string>
+#include <unordered_map>
+
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
 #include <boost/archive/binary_oarchive.hpp>
@@ -37,10 +40,11 @@ limitations under the License.
 #include <errno.h>
 
 #include "gstring.hpp"
+#include "exception.hpp"
 
 namespace glim {
 
-struct LdbEx: public std::runtime_error {LdbEx (std::string message): std::runtime_error (message) {}};
+G_DEFINE_EXCEPTION (LdbEx);
 
 template <typename T> inline void ldbSerialize (gstring& bytes, const T& data) {
   gstring_stream stream (bytes);
@@ -58,7 +62,7 @@ template <> inline void ldbSerialize<uint32_t> (gstring& bytes, const uint32_t& 
   uint32_t nui = htonl (ui); bytes.append ((const char*) &nui, sizeof (uint32_t));}
 /** Deserialize uint32_t from big-endian (network byte order). */
 template <> inline void ldbDeserialize<uint32_t> (const gstring& bytes, uint32_t& ui) {
-  if (bytes.size() != sizeof (uint32_t)) throw LdbEx ("Not uint32_t, wrong number of bytes");
+  if (bytes.size() != sizeof (uint32_t)) GNTHROW (LdbEx, "Not uint32_t, wrong number of bytes");
   uint32_t nui = * (uint32_t*) bytes.data(); ui = ntohl (nui);}
 
 /** If the data is `gstring` then use the data's buffer directly, no copy. */
@@ -151,14 +155,15 @@ struct Ldb {
   const Iterator end() {return Iterator (this, Iterator::EndIteratorFlag());}
 
   struct Trigger {
-    virtual gstring getTriggerName() const {return C2GSTRING ("defaultTriggerName");};
+    virtual gstring triggerName() const {return C2GSTRING ("defaultTriggerName");};
     virtual void put (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, leveldb::WriteBatch& batch) = 0;
     virtual void del (Ldb& ldb, void* key, gstring& kbytes, leveldb::WriteBatch& batch) = 0;
   };
-  std::map<gstring, std::shared_ptr<Trigger>> _triggers;
+  std::unordered_map<gstring, std::shared_ptr<Trigger>> _triggers;
 
-  void setTrigger (std::shared_ptr<Trigger> trigger) {
-    _triggers[trigger->getTriggerName()] = trigger;
+  /** Register the trigger (by its `triggerName`). */
+  void putTrigger (std::shared_ptr<Trigger> trigger) {
+    _triggers[trigger->triggerName()] = trigger;
   }
 
  public:
@@ -168,7 +173,7 @@ struct Ldb {
   /** Opens Leveldb database. */
   Ldb (const char* path, leveldb::Options* options = nullptr, mode_t mode = 0770) {
     int rc = ::mkdir (path, mode);
-    if (rc && errno != EEXIST) throw LdbEx (std::string ("Can't create ") + path + ": " + ::strerror (errno));
+    if (rc && errno != EEXIST) GNTHROW (LdbEx, std::string ("Can't create ") + path + ": " + ::strerror (errno));
     leveldb::DB* db;
     leveldb::Status status;
     if (options) {
@@ -178,7 +183,7 @@ struct Ldb {
       localOptions.create_if_missing = true;
       status = leveldb::DB::Open (localOptions, path, &db);
     }
-    if (!status.ok()) throw LdbEx (std::string ("Ldb: Can't open ") + path + ": " + status.ToString());
+    if (!status.ok()) GNTHROW (LdbEx, std::string ("Ldb: Can't open ") + path + ": " + status.ToString());
     _db.reset (db);
   }
 
@@ -202,7 +207,20 @@ struct Ldb {
     leveldb::WriteBatch batch;
     put (key, value, batch);
     leveldb::Status status (_db->Write (leveldb::WriteOptions(), &batch));
-    if (!status.ok()) throw LdbEx ("Ldb: add: " + status.ToString());
+    if (!status.ok()) GNTHROW (LdbEx, "Ldb: add: " + status.ToString());
+  }
+
+  /** Returns `true` if the key exists. Throws on error. */
+  template <typename K> bool have (const K& key, leveldb::ReadOptions options = leveldb::ReadOptions()) {
+    char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
+    gstring kbytes (sizeof (kbuf), kbuf, false, 0);
+    ldbSerialize (kbytes, key);
+    leveldb::Slice keySlice (kbytes.data(), kbytes.size());
+
+    leveldb::Status status (_db->Get (options, keySlice, nullptr));
+    if (status.ok()) return true;
+    if (status.IsNotFound()) return false;
+    throw std::runtime_error ("Ldb.have: " + status.ToString());
   }
 
   template <typename K, typename V> bool get (const K& key, V& value, leveldb::ReadOptions options = leveldb::ReadOptions()) {
@@ -213,7 +231,7 @@ struct Ldb {
 
 //    leveldb::Status status (_db->Get (options, keySlice, &vbytes));
 //    if (status.IsNotFound()) return false;
-//    if (!status.ok()) throw LdbEx ("Ldb: first: " + status.ToString());
+//    if (!status.ok()) GNTHROW (LdbEx, "Ldb: first: " + status.ToString());
 //    ldbDeserialize (vbytes, value);
 
     // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
@@ -233,7 +251,7 @@ struct Ldb {
     char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
     gstring kbytes (sizeof (kbuf), kbuf, false, 0);
     ldbSerialize (kbytes, key);
-    if (kbytes.empty()) throw LdbEx ("del: key is empty");
+    if (kbytes.empty()) GNTHROW (LdbEx, "del: key is empty");
 
     for (auto& trigger: _triggers) trigger.second->del (*this, (void*) &key, kbytes, batch);
 
@@ -243,111 +261,7 @@ struct Ldb {
     leveldb::WriteBatch batch;
     del (key, batch);
     leveldb::Status status (_db->Write (leveldb::WriteOptions(), &batch));
-    if (!status.ok()) throw LdbEx ("Ldb: del: " + status.ToString());
-  }
-
-  static void test (Ldb& ldb) {
-    ldb.put (std::string ("foo_"), std::string ("bar"));
-    ldb.put ((uint32_t) 123, 1);
-    ldb.put ((uint32_t) 123, 2);
-    ldb.put (C2GSTRING ("foo"), 3);
-    ldb.put (C2GSTRING ("foo"), 4);
-    ldb.put (C2GSTRING ("gsk"), C2GSTRING ("gsv"));
-    std::string ts; int ti; gstring tgs;
-    auto fail = [](string msg) {throw std::runtime_error ("assertion failed: " + msg);};
-    if (!ldb.get (std::string ("foo_"), ts) || ts != "bar") fail ("!foo_=bar");
-    if (!ldb.get ((uint32_t) 123, ti) || ti != 2) fail ("!123=2");
-    if (!ldb.get (C2GSTRING ("foo"), ti) || ti != 4) fail ("!foo=4");
-    if (!ldb.get (C2GSTRING ("gsk"), tgs) || tgs != "gsv") fail ("!gsk=gsv");
-
-    // Test range-based for.
-    int count = 0; bool haveGskGsv = false;
-    for (auto&& entry: ldb) {
-      if (!entry._lit->Valid()) fail ("!entry");
-      if (entry.keyView() == "gsk") {
-        if (entry.getKey<gstring>() != "gsk") fail ("getKey(gsk)!=gsk");
-        if (entry.getValue<gstring>() != "gsv") fail ("getValue(gsk)!=gsv");
-        haveGskGsv = true;
-      }
-      ++count;}
-    if (count != 4) fail ("count!=4"); // foo_=bar, 123=2, foo=4, gsk=gsv
-    if (!haveGskGsv) fail ("!haveGskGsv");
-
-    ldb.del ((uint32_t) 123); if (ldb.get ((uint32_t) 123, ti)) fail ("123");
-    ldb.del (C2GSTRING ("foo")); if (ldb.get (C2GSTRING ("foo"), ti)) fail ("foo");
-    ldb.del (std::string ("foo_"));
-
-    { // We've erased "123" and "foo", the only key left is "gsk" (gsk=gsv), let's test the iterator boundaries on this small dataset.
-      auto&& it = ldb.begin();
-      if (it->getKey<gstring>() != "gsk") fail ("first key !gsk " + it->keyView().str());
-      if (!(++it).end()) fail ("++it != end");
-      if ((--it)->getKey<gstring>() != "gsk") fail ("can't go back to gsk");
-      if (!(--it).end()) fail ("--it != end");
-      if ((++it)->getKey<gstring>() != "gsk") fail ("can't go forward to gsk");
-    }
-
-// todo: index trigger example
-//    struct SimpleIndexTrigger: public Trigger { // Uses key space partitioning (cf. http://stackoverflow.com/a/12503799/257568)
-//      const char* _name; Ldb _indexDb;
-//      SimpleIndexTrigger (Ldb& ldb, const char* name = "index"): _name (name), _indexDb (ldb._env, name) {}
-//      gstring getTriggerName() {return gstring (0, (void*) _name, false, strlen (_name), true);}
-//      void add (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, Transaction& txn) {
-//        MDB_val mkey = {vbytes.size(), (void*) vbytes.data()};
-//        MDB_val mvalue = {kbytes.size(), (void*) kbytes.data()};
-//        int rc = ::ldb_put (txn.get(), _indexDb._dbi, &mkey, &mvalue, 0);
-//        if (rc) throw LdbEx (std::string ("index, ldb_put: ") + ::strerror (rc));
-//      }
-//      void erase (Ldb& ldb, void* ekey, gstring& kbytes, Transaction& txn) {
-//        // Get all the values and remove them from the index.
-//        MDB_cursor* cur = 0; int rc = ::ldb_cursor_open (txn.get(), ldb._dbi, &cur);
-//        if (rc) throw LdbEx (std::string ("index, erase, ldb_cursor_open: ") + ::strerror (rc));
-//        std::unique_ptr<MDB_cursor, void(*)(MDB_cursor*)> curHolder (cur, ::ldb_cursor_close);
-//        MDB_val mkey = {kbytes.size(), (void*) kbytes.data()}, val = {0, 0};
-//        rc = ::ldb_cursor_get (cur, &mkey, &val, ::MDB_SET_KEY); if (rc == MDB_NOTFOUND) return;
-//        if (rc) throw LdbEx (std::string ("index, erase, ldb_cursor_get: ") + ::strerror (rc));
-//        rc = ::ldb_del (txn.get(), _indexDb._dbi, &val, &mkey);
-//        if (rc && rc != MDB_NOTFOUND) throw LdbEx (std::string ("index, erase, ldb_del: ") + ::strerror (rc));
-//        for (;;) {
-//          rc = ::ldb_cursor_get (cur, &mkey, &val, ::MDB_NEXT_DUP); if (rc == MDB_NOTFOUND) return;
-//          if (rc) throw LdbEx (std::string ("index, erase, ldb_cursor_get: ") + ::strerror (rc));
-//          rc = ::ldb_del (txn.get(), _indexDb._dbi, &val, &mkey);
-//          if (rc && rc != MDB_NOTFOUND) throw LdbEx (std::string ("index, erase, ldb_del: ") + ::strerror (rc));
-//        }
-//      }
-//      void eraseKV (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, Transaction& txn) {
-//        MDB_val mkey = {vbytes.size(), (void*) vbytes.data()};
-//        MDB_val mvalue = {kbytes.size(), (void*) kbytes.data()};
-//        int rc = ::ldb_del (txn.get(), _indexDb._dbi, &mkey, &mvalue);
-//        if (rc && rc != MDB_NOTFOUND) throw LdbEx (std::string ("index, ldb_del: ") + ::strerror (rc));
-//      }
-//    };
-//    auto indexTrigger = std::make_shared<SimpleIndexTrigger> (ldb); ldb.setTrigger (indexTrigger); auto& indexDb = indexTrigger->_indexDb;
-//    ldb.erase (C2GSTRING ("gsk")); // NB: "gsk" wasn't indexed here. `IndexTrigger.erase` should handle this gracefully.
-
-    // Add indexed.
-//    ldb.put (C2GSTRING ("ik"), C2GSTRING ("iv1"));
-//    ldb.put (C2GSTRING ("ik"), string ("iv2"));
-//    ldb.put (C2GSTRING ("ik"), 3);
-    // Check the index.
-//    gstring ik;
-//    if (!indexDb.first (C2GSTRING ("iv1"), ik) || ik != "ik") fail ("!iv1=ik");
-//    if (!indexDb.first (string ("iv2"), ik) || ik != "ik") fail ("!iv2=ik");
-//    if (!indexDb.first (3, ik) || ik != "ik") fail ("!iv3=ik");
-
-    // Remove indexed.
-//    ldb.eraseKV (C2GSTRING ("ik"), string ("iv2"));
-    // Check the index.
-//    if (!indexDb.first (C2GSTRING ("iv1"), ik) || ik != "ik") fail ("!iv1=ik");
-//    if (indexDb.first (string ("iv2"), ik)) fail ("iv2=ik");
-//    if (!indexDb.first (3, ik) || ik != "ik") fail ("!iv3=ik");
-
-    // Remove indexed.
-//    ldb.erase (C2GSTRING ("ik"));
-    // Check the index.
-//    if (indexDb.first (C2GSTRING ("iv1"), ik)) fail ("iv1");
-//    if (indexDb.first (3, ik)) fail ("iv3");
-    // Check the data.
-//    if (ldb.first (C2GSTRING ("ik"), ik)) fail ("ik");
+    if (!status.ok()) GNTHROW (LdbEx, "Ldb: del: " + status.ToString());
   }
 
   virtual ~Ldb() {

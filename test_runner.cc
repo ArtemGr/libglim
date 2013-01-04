@@ -1,6 +1,7 @@
 #include "runner.hpp"
 #include "curl.hpp"
 #include <thread>
+#include <iostream>
 #include <assert.h>
 
 int main () {
