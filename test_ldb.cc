@@ -139,6 +139,10 @@ void testStartsWith (Ldb& ldb) {
   count = 0; for (auto& en: ldb.startsWith (C2GSTRING (""))) {en.keyView(); ++count;} assert (count == 6);
 
   assert (ldb.startsWith (C2GSTRING ("-")) .empty());
+
+  count = 0; for (auto& en: boost::make_iterator_range (ldb.end().seek ("1"), ldb.end().seek ("2"))) {en.keyView(); ++count;} assert (count == 1);
+  count = 0; for (auto& en: boost::make_iterator_range (ldb.end().seek ("2"), ldb.end().seek ("3"))) {en.keyView(); ++count;} assert (count == 3);
+  count = 0; for (auto& en: ldb.range (C2GSTRING ("1"), C2GSTRING ("2"))) {en.keyView(); ++count;} assert (count == 1);
 }
 
 int main() {
