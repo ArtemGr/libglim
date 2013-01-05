@@ -22,7 +22,8 @@ limitations under the License.
  */
 
 #include <string>
-#include <unordered_map>
+//#include <unordered_map> // having SIGFPE as in http://stackoverflow.com/q/13580823/257568
+#include <map>
 #include <climits> // CHAR_MAX
 
 #include <leveldb/db.h>
@@ -166,9 +167,30 @@ struct Ldb {
       else entry->_lit->SeekToLast();
       entry->_valid = entry->_lit->Valid();
     }
+
+    Iterator& seek (const gstring& key) {
+      IteratorEntry* entry = _entry.get();
+      entry->_lit->Seek (leveldb::Slice (key.data(), key.size()));
+      entry->_valid = entry->_lit->Valid();
+      return *this;
+    }
   };
   Iterator begin() {return Iterator (this);}
-  const Iterator end() {return Iterator (this, NoSeekFlag());}
+  Iterator end() {return Iterator (this, NoSeekFlag());}
+
+  /** Range from `from` (inclusive) to `till` (exclusive). */
+  template <typename K>
+  boost::iterator_range<Iterator> range (const K& from, const K& till, leveldb::ReadOptions options = leveldb::ReadOptions()) {
+    char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
+    gstring kbytes (sizeof (kbuf), kbuf, false, 0);
+    ldbSerialize (kbytes, from);
+    Iterator fit (this, NoSeekFlag(), options); fit.seek (kbytes);
+
+    ldbSerialize (kbytes.clear(), till);
+    Iterator tit (this, NoSeekFlag(), options); tit.seek (kbytes);
+
+    return boost::iterator_range<Iterator> (fit, tit);
+  }
 
   struct StartsWithIterator: public Iterator {
     gstring _starts;
@@ -235,7 +257,7 @@ struct Ldb {
     virtual void put (Ldb& ldb, void* key, gstring& kbytes, void* value, gstring& vbytes, leveldb::WriteBatch& batch) = 0;
     virtual void del (Ldb& ldb, void* key, gstring& kbytes, leveldb::WriteBatch& batch) = 0;
   };
-  std::unordered_map<gstring, std::shared_ptr<Trigger>> _triggers;
+  std::map<gstring, std::shared_ptr<Trigger>> _triggers;
 
   /** Register the trigger (by its `triggerName`). */
   void putTrigger (std::shared_ptr<Trigger> trigger) {
@@ -338,6 +360,12 @@ struct Ldb {
     del (key, batch);
     leveldb::Status status (_db->Write (leveldb::WriteOptions(), &batch));
     if (!status.ok()) GNTHROW (LdbEx, "Ldb: del: " + status.ToString());
+  }
+
+  /** Writes the batch. Throws LdbEx if not successfull. */
+  void write (leveldb::WriteBatch& batch, leveldb::WriteOptions options = leveldb::WriteOptions()) {
+    leveldb::Status status (_db->Write (options, &batch));
+    if (!status.ok()) GNTHROW (LdbEx, status.ToString());
   }
 
   virtual ~Ldb() {
