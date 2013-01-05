@@ -123,11 +123,22 @@ void testStartsWith (Ldb& ldb) {
   assert ((--it)->keyView() == "02"); assert (it != range.end());
   assert ((--it)->keyView() == "01"); assert (it != range.end());
   assert ((--it)->keyView().empty()); assert (it == range.end());
+  // `it` and `range.begin` point to the same `leveldb::Iterator`.
+  assert (range.begin()._entry->_lit == it._entry->_lit);
+  assert (!range.begin()._entry->_valid); assert (range.begin()->keyView().empty());
+
+  range = ldb.startsWith (C2GSTRING ("0")); it = range.end();
+  assert (it.end() && it->keyView().empty()); assert (it != range.begin());
+  assert ((--it)->keyView() == "02"); assert (it != range.begin());
+  assert ((--it)->keyView() == "01"); assert (it == range.begin());
+  assert ((--it)->keyView().empty()); assert (it != range.begin());
 
   int8_t count = 0; for (auto& en: ldb.startsWith (C2GSTRING ("1"))) {en.keyView(); ++count;} assert (count == 1);
   count = 0; for (auto& en: ldb.startsWith (C2GSTRING ("2"))) {en.keyView(); ++count;} assert (count == 3);
   count = 0; for (auto& en: ldb.startsWith (C2GSTRING ("-"))) {en.keyView(); ++count;} assert (count == 0);
   count = 0; for (auto& en: ldb.startsWith (C2GSTRING (""))) {en.keyView(); ++count;} assert (count == 6);
+
+  assert (ldb.startsWith (C2GSTRING ("-")) .empty());
 }
 
 int main() {
@@ -137,7 +148,7 @@ int main() {
   Ldb ldb ("/dev/shm/ldbTest");
   test1 (ldb);
 
-  for (auto en: ldb) ldb.del (en.keyView());
+  for (auto& en: ldb) ldb.del (en.keyView());
   testStartsWith (ldb);
 
   ldb._db.reset(); // Close.
