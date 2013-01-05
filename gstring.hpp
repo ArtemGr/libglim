@@ -194,6 +194,10 @@ public:
     return *this;
   }
 
+  gstring clone() const {
+    return gstring (data(), length());
+  }
+
   bool needsFreeing() const {return _meta & FREE_FLAG;}
   bool copiedByReference() const {return _meta & REF_FLAG;}
   /** Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated. */
