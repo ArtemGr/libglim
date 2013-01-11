@@ -69,6 +69,8 @@ class Curl {
     if (_curl) {if (_needs_cleanup) curl_easy_cleanup (_curl); _curl = NULL;}
   }
 
+  /** Stores the content to be sent into an `std::string` inside `Curl`.\n
+   * In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
   template<typename STR> Curl& send (STR&& text) {_send = std::forward<std::string> (text); _sent = 0; return *this;}
 
   /** Adds "Content-Type" header into `_headers`. */

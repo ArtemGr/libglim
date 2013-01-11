@@ -37,6 +37,12 @@ namespace glim {
 //  - http://stackoverflow.com/a/4720403/257568)
 // A handler to call a debugger? (see: http://stackoverflow.com/a/4732119/257568)
 
+// todo: Try a helper which uses cairo's backtrace-symbols.c
+// http://code.ohloh.net/file?fid=zUOUdEl-Id-ijyPOmCkVnBJt2d8&cid=zGpizbyIjEw&s=addr2line&browser=Default#L7
+
+// todo: Try a helper which uses cairo's lookup-symbol.c
+// http://code.ohloh.net/file?fid=Je2jZqsOxge_SvWVrvywn2I0TIs&cid=zGpizbyIjEw&s=addr2line&browser=Default#L0
+
 // todo: A helper converting backtrace to addr2line invocation, e.g.
 // bin/test_exception() [0x4020cc];bin/test_exception(__cxa_throw+0x47) [0x402277];bin/test_exception() [0x401c06];/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xfd) [0x57f0ead];bin/test_exception() [0x401fd1];
 // should be converted to
@@ -44,6 +50,7 @@ namespace glim {
 //
 // The helper should read the shared library addresses from /proc/.../map and generate separate addr2line invocations
 // for groups of addresses inside the same shared library.
+// => dladdr instead of /proc/../map; http://stackoverflow.com/a/2606152/257568
 //
 // Shared libraries (http://stackoverflow.com/a/7557756/257568).
 // Example, backtrace: /usr/local/lib/libfrople.so(_ZN5mongo14BSONObjBuilder8appendAsERKNS_11BSONElementERKNS_10StringDataE+0x1ca) [0x2aef5b45eb8a]
@@ -130,6 +137,9 @@ class Exception: public std::runtime_error {
 };
 
 /** RAII control of thrown `Exception`s.\n
+ * Example: \code
+ *   glim::ExceptionControl trace (glim::Exception::Options::CAPTURE_TRACE);
+ * \endcode
  * Modifies the `Exception` options via a thread-local variable and restores them back upon destruction.\n
  * Currently uses http://gcc.gnu.org/onlinedocs/gcc-4.7.2/gcc/Thread_002dLocal.html
  * (might use C++11 `thread_local` in the future). */
