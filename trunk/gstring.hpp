@@ -464,8 +464,8 @@ inline bool operator == (const gstring& gstr, const std::string& str) {return gs
 inline bool operator != (const gstring& gstr, const std::string& str) {return !(gstr == str);}
 inline bool operator == (const std::string& str, const gstring& gstr) {return gstr == str;}
 inline bool operator != (const std::string& str, const gstring& gstr) {return !(gstr == str);}
-inline std::string& operator += (std::string& str, const gstring& gstr) {return str.append (gstr.data(), gstr.size());}
-inline std::string& operator + (const std::string& str, const gstring& gstr) {return std::string (str) .append (gstr.data(), gstr.size());}
+inline std::string operator += (std::string& str, const gstring& gstr) {return str.append (gstr.data(), gstr.size());}
+inline std::string operator + (const std::string& str, const gstring& gstr) {return std::string (str) .append (gstr.data(), gstr.size());}
 
 inline std::ostream& operator << (std::ostream& os, const gstring& gstr) {
   if (gstr._buf != nullptr) os.write ((const char*) gstr._buf, gstr.length());

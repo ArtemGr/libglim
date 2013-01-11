@@ -181,8 +181,9 @@ public:
 
 #ifdef _GLIM_EXCEPTION_CODE
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && (defined (__linux__) || defined (_SYSTYPE_BSD))
 # include <execinfo.h> // backtrace; http://www.gnu.org/software/libc/manual/html_node/Backtraces.html
+# define _GLIM_USE_EXECINFO
 #endif
 
 namespace glim {
@@ -194,7 +195,7 @@ __thread void* EXCEPTION_HANDLER_ARG = nullptr;
 /** If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
  * otherwise printed to write(2). */
 void captureBacktrace (void* stdStringPtr) {
-#if defined(__GNUC__) || defined (_EXECINFO_H) || defined (_EXECINFO_H_)
+#ifdef _GLIM_USE_EXECINFO
   const int arraySize = 10; void *array[arraySize];
   int got = ::backtrace (array, arraySize);
   if (stdStringPtr) {
