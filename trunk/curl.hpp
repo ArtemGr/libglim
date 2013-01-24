@@ -156,7 +156,11 @@ inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *us
  *   std::string w3 = glim::curl2str ("http://www.w3.org/");
  */
 inline std::string curl2str (const char* url, int timeoutSec = 20) {
-  return glim::Curl().http (url, timeoutSec) .go().str();}
+  try {
+    return glim::Curl().http (url, timeoutSec) .go().str();
+  } catch (const std::exception&) {}
+  return std::string();
+}
 
 }
 
