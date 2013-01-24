@@ -87,6 +87,7 @@ class hget {
   enum evhttp_cmd_type _method;
  public:
   typedef std::shared_ptr<struct evhttp_uri> uri_t;
+  /** The third parameter is the request number, starting from 1. */
   typedef std::function<float(hgot&,uri_t,int32_t)> until_handler_t;
  public:
   hget (std::shared_ptr<struct event_base> evbase, std::shared_ptr<struct evdns_base> dnsbase):
