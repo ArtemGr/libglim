@@ -58,7 +58,7 @@ protected:
 
   bool shouldRun (jobs_map_t::value_type& entry, const struct timespec& ct) {
     JobInfo& jobInfo = entry.second;
-    if (jobInfo.pauseSec <= 0.0f) return true;
+    if (jobInfo.pauseSec <= 0.f) return true; // Run always.
     if (jobInfo.ran.tv_sec == 0) {jobInfo.ran = ct; return true;}
     float delta = (float)(ct.tv_sec - jobInfo.ran.tv_sec);
     delta += (float)(ct.tv_nsec - jobInfo.ran.tv_nsec) / 1000000000.0f;
@@ -201,10 +201,12 @@ public:
   }
   /** Register a new job to be run on the thread loop. */
   void schedule (const gstring& name, float pauseSec, job_t job) {
+    struct timespec ct; if (pauseSec > 0.f) clock_gettime (CLOCK_MONOTONIC, &ct);
     std::lock_guard<std::recursive_mutex> lock (_mutex);
     JobInfo& jobInfo = _jobs[name];
     jobInfo.job = job;
     jobInfo.pauseSec = pauseSec;
+    if (pauseSec > 0.f) jobInfo.ran = ct; // If we need a pause then we also need to know when the job was scheduled.
   }
   void removeJob (const gstring& name) {
     std::lock_guard<std::recursive_mutex> lock (_mutex);
