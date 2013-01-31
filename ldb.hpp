@@ -315,10 +315,13 @@ struct Ldb {
     ldbSerialize (kbytes, key);
     leveldb::Slice keySlice (kbytes.data(), kbytes.size());
 
-    leveldb::Status status (_db->Get (options, keySlice, nullptr));
-    if (status.ok()) return true;
-    if (status.IsNotFound()) return false;
-    throw std::runtime_error ("Ldb.have: " + status.ToString());
+    // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
+    std::unique_ptr<leveldb::Iterator> it (_db->NewIterator (options));
+    it->Seek (keySlice); if (it->Valid()) {
+      auto&& itKey = it->key();
+      return itKey.size() == keySlice.size() && memcmp (itKey.data(), keySlice.data(), itKey.size()) == 0;
+    }
+    return false;
   }
 
   template <typename K, typename V> bool get (const K& key, V& value, leveldb::ReadOptions options = leveldb::ReadOptions()) {
@@ -326,11 +329,6 @@ struct Ldb {
     gstring kbytes (sizeof (kbuf), kbuf, false, 0);
     ldbSerialize (kbytes, key);
     leveldb::Slice keySlice (kbytes.data(), kbytes.size());
-
-//    leveldb::Status status (_db->Get (options, keySlice, &vbytes));
-//    if (status.IsNotFound()) return false;
-//    if (!status.ok()) GNTHROW (LdbEx, "Ldb: first: " + status.ToString());
-//    ldbDeserialize (vbytes, value);
 
     // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
     std::unique_ptr<leveldb::Iterator> it (_db->NewIterator (options));
