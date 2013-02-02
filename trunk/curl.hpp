@@ -13,15 +13,11 @@
 
 namespace glim {
 
-inline size_t curlWriteToGstring (void *buffer, size_t size, size_t nmemb, void *userp) {
-  ((gstring*) userp)->append ((const char*) buffer, size * nmemb);
+inline size_t curlWriteToString (void *buffer, size_t size, size_t nmemb, void *userp) {
+  ((std::string*) userp)->append ((const char*) buffer, size * nmemb);
   return size * nmemb;};
 
 inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *userdata);
-
-//inline size_t curlWriteToString (void *buffer, size_t size, size_t nmemb, void *userp) {
-//  ((std::string*) userp)->append ((const char*) buffer, size * nmemb);
-//  return size * nmemb;};
 
 /**
  * Simple HTTP requests using cURL.
@@ -51,16 +47,12 @@ class Curl {
   struct curl_slist *_headers;
   std::string _send; ///< We're using `std::string` instead of `gstring` in order to support payloads larger than 16 MiB.
   uint32_t _sent;
-  gstring _got;
+  std::string _got;
   bool _needs_cleanup:1; ///< ~Curl will do `curl_easy_cleanup` if `true`.
   char _errorBuf[CURL_ERROR_SIZE];
 
   /** @param cleanup can be turned off if the CURL is freed elsewhere. */
   Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
-  /** Tries to reuse the given character buffer.
-   * @param cleanup can be turned off if the CURL is freed elsewhere. */
-  Curl (size_t bufSize, char* buf, bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0),
-    _got (bufSize, buf, false, 0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
   /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless).
    * @param cleanup can be turned off if the CURL is freed elsewhere. */
   Curl (CURL* curl, bool cleanup = true): _curl (curl), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
@@ -87,7 +79,7 @@ class Curl {
    */
   Curl& http (const char* url, int timeoutSec = 20) {
     curl_easy_setopt (_curl, CURLOPT_URL, url);
-    curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToGstring);
+    curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToString);
     curl_easy_setopt (_curl, CURLOPT_WRITEDATA, &_got);
     curl_easy_setopt (_curl, CURLOPT_TIMEOUT, timeoutSec);
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
@@ -133,10 +125,9 @@ class Curl {
     return *this;
   }
 
-  std::string str() const {return _got.str();}
-  gstring& gstr() {return _got;}
-  const gstring& gstr() const {return _got;}
+  std::string str() const {return _got;}
   const char* c_str() const {return _got.c_str();}
+  gstring gstr() const {return gstring (0, (void*) _got.data(), false, _got.size());}
 
   long status() const {
     long status; CURLcode err = curl_easy_getinfo (_curl, CURLINFO_RESPONSE_CODE, &status);
