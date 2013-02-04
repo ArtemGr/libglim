@@ -119,7 +119,9 @@ class Curl {
     return *this;
   }
 
+  /** Reset the buffers and perform the CURL request. */
   Curl& go() {
+    _got.clear();
     *_errorBuf = 0;
     if (curl_easy_perform (_curl)) throw PerformError (_errorBuf, __FILE__, __LINE__);
     return *this;
