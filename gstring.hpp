@@ -225,7 +225,7 @@ public:
   bool equals (const gstring& gs) const {
     uint32_t llen = length(), olen = gs.length();
     if (llen != olen) return false;
-    return strncmp ((const char*) _buf, (const char*) gs._buf, llen) == 0;
+    return memcmp ((const char*) _buf, (const char*) gs._buf, llen) == 0;
   }
 
   char& operator[] (unsigned index) {return ((char*)_buf)[index];}
