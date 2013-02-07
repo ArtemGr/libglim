@@ -220,7 +220,7 @@ public:
     const uint32_t len = length();
     if (len != clen_) return false;
     const char* gstr_ = _buf != nullptr ? (const char*) _buf : "";
-    return strncmp (gstr_, cstr_, len) == 0;
+    return memcmp (gstr_, cstr_, len) == 0;
   }
   bool equals (const gstring& gs) const {
     uint32_t llen = length(), olen = gs.length();
