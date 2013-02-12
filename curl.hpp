@@ -107,6 +107,7 @@ class Curl {
     if (to) _headers = curl_slist_append (_headers, to);
     if (_headers) curl_easy_setopt (_curl, CURLOPT_MAIL_RCPT, _headers);
     if (_send.size()) {
+      curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _send.size());
       curl_easy_setopt (_curl, CURLOPT_READFUNCTION, glim::curlReadFromString);
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);
     }
