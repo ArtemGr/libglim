@@ -31,18 +31,14 @@ class Curl {
   Curl (const Curl&): _curl (NULL), _headers (NULL), _sent (0), _needs_cleanup (true) {} // No copying.
  public:
   struct PerformError: public glim::Exception {
-    char _message[CURL_ERROR_SIZE+1];
     PerformError (const char* message, const char* file, int32_t line):
-      glim::Exception (std::string(), file, line) {
-      strncpy (_message, message, CURL_ERROR_SIZE); _message[CURL_ERROR_SIZE] = 0;}
-    virtual const char* what() const throw() {return _message;}
+      glim::Exception (message, file, line) {}
   };
   struct GetinfoError: public glim::Exception {
-    CURLINFO _info; const char* _error;
-    GetinfoError (CURLINFO info, const char* error, const char* file, int32_t line):
-      glim::Exception (std::string(), file, line),
-      _info (info), _error (error) {}
-    virtual const char* what() const throw() {return _error;}
+    CURLcode _code; std::string _error;
+    GetinfoError (CURLcode code, std::string error, const char* file, int32_t line):
+      glim::Exception (error, file, line),
+      _code (code), _error (error) {}
   };
  public:
   CURL* _curl;
@@ -153,7 +149,7 @@ class Curl {
 
   long status() const {
     long status; CURLcode err = curl_easy_getinfo (_curl, CURLINFO_RESPONSE_CODE, &status);
-    if (err) throw GetinfoError (CURLINFO_RESPONSE_CODE, curl_easy_strerror (err), __FILE__, __LINE__);
+    if (err) throw GetinfoError (err, std::string ("CURL error ") + std::to_string (err) + ": " + curl_easy_strerror (err), __FILE__, __LINE__);
     return status;}
 };
 
