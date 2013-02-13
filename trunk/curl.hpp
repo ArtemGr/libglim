@@ -8,6 +8,7 @@
 #include "exception.hpp"
 #include <curl/curl.h>
 #include <algorithm>
+#include <functional>
 #include <string.h>
 #include <stdint.h>
 
@@ -18,6 +19,7 @@ inline size_t curlWriteToString (void *buffer, size_t size, size_t nmemb, void *
   return size * nmemb;};
 
 inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *userdata);
+inline size_t curlWriteHeader (void *ptr, size_t size, size_t nmemb, void *curlPtr);
 
 /**
  * Simple HTTP requests using cURL.
@@ -45,6 +47,7 @@ class Curl {
  public:
   CURL* _curl;
   struct curl_slist *_headers;
+  std::function<void (const char* header, int len)> _headerListener;
   std::string _send; ///< We're using `std::string` instead of `gstring` in order to support payloads larger than 16 MiB.
   uint32_t _sent;
   std::string _got;
@@ -70,6 +73,12 @@ class Curl {
     char ctb[64]; gstring cth (sizeof (ctb), ctb, false, 0);
     cth << "Content-Type: " << ct << "\r\n";
     _headers = curl_slist_append (_headers, cth.c_str());
+    return *this;
+  }
+
+  /** @param fullHeader is a full HTTP header and a newline, e.g. "User-Agent: Me\r\n". */
+  Curl& header (const char* fullHeader) {
+    _headers = curl_slist_append (_headers, fullHeader);
     return *this;
   }
 
@@ -108,7 +117,7 @@ class Curl {
     if (_headers) curl_easy_setopt (_curl, CURLOPT_MAIL_RCPT, _headers);
     if (_send.size()) {
       curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _send.size());
-      curl_easy_setopt (_curl, CURLOPT_READFUNCTION, glim::curlReadFromString);
+      curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromString);
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);
     }
     return *this;
@@ -117,6 +126,16 @@ class Curl {
   /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method. */
   Curl& method (const char* method) {
     curl_easy_setopt (_curl, CURLOPT_CUSTOMREQUEST, method);
+    return *this;
+  }
+
+  /** Setup a handler to process the headers CURL gets from the response.\n
+   * "The header callback will be called once for each header and only complete header lines are passed on to the callback".\n
+   * See http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTHEADERFUNCTION */
+  Curl& headerListener (std::function<void (const char* header, int len)> listener) {
+    curl_easy_setopt (_curl, CURLOPT_HEADERFUNCTION, curlWriteHeader);
+    curl_easy_setopt (_curl, CURLOPT_WRITEHEADER, this);
+    _headerListener = listener;
     return *this;
   }
 
@@ -144,6 +163,15 @@ inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *us
   if (len) memcpy (ptr, curl->_send.data() + curl->_sent, len);
   curl->_sent += len;
   return len;}
+
+// http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTHEADERFUNCTION
+inline size_t curlWriteHeader (void *ptr, size_t size, size_t nmemb, void *curlPtr) {
+  Curl* curl = (Curl*) curlPtr;
+  std::function<void (const char* header, int len)>& listener = curl->_headerListener;
+  int len = size * nmemb;
+  if (listener) listener ((const char*) ptr, len);
+  return (size_t) len;
+}
 
 /**
  * Example:
