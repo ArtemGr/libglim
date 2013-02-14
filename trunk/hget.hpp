@@ -1,3 +1,6 @@
+// Simple header-only wrapper around libevent's evhttp client.
+// See also: https://github.com/cpp-netlib/cpp-netlib/issues/160
+
 #ifndef _GLIM_HGET_INCLUDED
 #define _GLIM_HGET_INCLUDED
 
