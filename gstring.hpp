@@ -350,6 +350,8 @@ public:
     ::memcpy ((char*) _buf + len, cstr, clen);
     length (need);
   }
+  /** This one is for http://code.google.com/p/re2/; `clear` then `append`. */
+  bool ParseFrom (const char* cstr, int clen) {length (0); append (cstr, (uint32_t) clen); return true;}
   gstring& operator << (const gstring& gs) {append (gs.data(), gs.length()); return *this;}
   gstring& operator << (const std::string& str) {append (str.data(), str.length()); return *this;}
   gstring& operator << (const char* cstr) {append (cstr, ::strlen (cstr)); return *this;}
