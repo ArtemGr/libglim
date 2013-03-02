@@ -68,6 +68,7 @@ install:
 	cp mdb.hpp ${INSTALL2}/
 	cp ldb.hpp ${INSTALL2}/
 	cp exception.hpp ${INSTALL2}/
+	cp SerializablePool.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
