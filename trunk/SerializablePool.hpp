@@ -162,6 +162,12 @@ public:
   void readOnly (bool ro) {if (_impl) _impl->_readOnly = true;}
   bool readOnly() const {return (_impl ? _impl->_readOnly : false);}
 
+  /** Number of elements in the pool. Equals to max(num)-1. */
+  uint32_t size() {
+    Impl* impl = _impl.get(); if (!impl) return 0;
+    return std::max (poolSize (impl->_pool), (uint32_t) impl->_changed.size());
+  }
+
 #ifndef _SERIALIZABLEPOOL_NOLDB
   /** Serialize the `value` with `ldbSerialize` and `set` it to `num`.
    * @param stackSize is the amount of space to preallocate on stack for the temporary buffer. */
