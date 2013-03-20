@@ -330,12 +330,15 @@ public:
 
 protected:
   friend class gstring_stream;
-  void append64 (int64_t iv, int bytes = 24) {
+public:
+  /** Appends an integer to the string.
+   * @param base Radix, from 1 to 36 (default 10).
+   * @param bytes How many bytes to reserve (24 by default). */
+  void append64 (int64_t iv, int base = 10, uint_fast8_t bytes = 24) {
     uint32_t pos = length();
     if (capacity() < pos + bytes) reserve (pos + bytes);
-    length (itoa ((char*) _buf + pos, iv, 10) - (char*) _buf);
+    length (itoa ((char*) _buf + pos, iv, base) - (char*) _buf);
   }
-public:
   void append (char ch) {
     uint32_t pos = length();
     const uint32_t cap = capacity();
@@ -359,9 +362,9 @@ public:
   gstring& operator << (const std::string& str) {append (str.data(), str.length()); return *this;}
   gstring& operator << (const char* cstr) {append (cstr, ::strlen (cstr)); return *this;}
   gstring& operator << (char ch) {append (ch); return *this;}
-  gstring& operator << (int iv) {append64 (iv, sizeof (int) * 3); return *this;}
-  gstring& operator << (long iv) {append64 (iv, sizeof (long) * 3); return *this;}
-  gstring& operator << (long long iv) {append64 (iv, sizeof (long long) * 3); return *this;}
+  gstring& operator << (int iv) {append64 (iv, 10, sizeof (int) * 3); return *this;}
+  gstring& operator << (long iv) {append64 (iv, 10, sizeof (long) * 3); return *this;}
+  gstring& operator << (long long iv) {append64 (iv, 10, sizeof (long long) * 3); return *this;}
 
   bool operator < (const gstring &gs) const {
     uint32_t len1 = length(); uint32_t len2 = gs.length();
