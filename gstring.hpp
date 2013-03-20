@@ -44,6 +44,7 @@ namespace glim {
  * Based on: C++ version 0.4 char* style "itoa": Written by Lukás Chmela, http://www.strudel.org.uk/itoa/ (GPLv3).
  * Returns a pointer to the end of the string.
  * NB about `inline`: http://stackoverflow.com/a/1759575/257568
+ * @param base Maximum is 36 (see http://en.wikipedia.org/wiki/Base_36).
  */
 inline char* itoa (char* ptr, int64_t value, const int base = 10) {
   // check that the base is valid
