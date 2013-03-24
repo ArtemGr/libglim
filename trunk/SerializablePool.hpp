@@ -163,7 +163,7 @@ public:
   bool readOnly() const {return (_impl ? _impl->_readOnly : false);}
 
   /** Number of elements in the pool. Equals to max(num)-1. */
-  uint32_t size() {
+  uint32_t size() const {
     Impl* impl = _impl.get(); if (!impl) return 0;
     return std::max (poolSize (impl->_pool), (uint32_t) impl->_changed.size());
   }
