@@ -195,9 +195,10 @@ public:
     return *this;
   }
 
-  gstring clone() const {
-    return gstring (data(), length());
-  }
+  gstring clone() const {return gstring (data(), length());}
+  /** Returns a reference to the gstring: when the reference is copied the internal buffer is not copied but referenced (shallow copy).\n
+   * This method should only be used if it is know that the life-time of the reference and its copies is less than the life-time of the buffer. */
+  gstring ref() const {return gstring (0, _buf, false, length(), true);}
 
   bool needsFreeing() const {return _meta & FREE_FLAG;}
   bool copiedByReference() const {return _meta & REF_FLAG;}
