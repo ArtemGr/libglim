@@ -26,7 +26,8 @@ protected:
     Impl (const gstring& poolBytes): _pool (poolBytes), _readOnly (false) {}
   };
   std::shared_ptr<Impl> _impl;
-  static gstring original (const gstring& pool, uint32_t num) {
+  /** @param ref Return a zero-copy view. The view should not be used outside of the pool buffer's lifetime. */
+  static gstring original (const gstring& pool, uint32_t num, bool ref = false) {
     uint32_t poolLength = pool.length(); if (poolLength < 4) return gstring();
     uint32_t valuesStart = ntohl (*(uint32_t*) pool.data());
     assert (valuesStart <= poolLength);
@@ -37,7 +38,7 @@ protected:
     uint32_t nextValueOffset = ((int) valuesStart - (int) valueOffsetOffset < 4)
       ? poolLength
       : ntohl (*(uint32_t*) (pool.data() + valueOffsetOffset));
-    return gstring (0, (void*) (pool.data() + valueOffset), false, nextValueOffset - 1 - valueOffset);
+    return gstring (0, (void*) (pool.data() + valueOffset), false, nextValueOffset - 1 - valueOffset, ref);
   }
   /** How many elements are in the pool. */
   static uint32_t poolSize (const gstring& pool) {
@@ -72,18 +73,21 @@ public:
   /** Copy the given pool bytes from the outside source (e.g. from the database). */
   SerializablePool (const gstring& poolBytes): _impl (std::make_shared<Impl> (poolBytes)) {}
   /** Returns a view into the original serialized field (ignores the current changes).\n
-   * Returns an empty string if the field is not in the pool (num > size). */
-  const gstring original (uint32_t num) const {return original (_impl->_pool, num);}
+   * Returns an empty string if the field is not in the pool (num > size).
+   * @param ref Return a zero-copy view. The view becomes invalid after the value has been changed or when the pool's `Impl` is destroyed. */
+  const gstring original (uint32_t num, bool ref = false) const {return original (_impl->_pool, num, ref);}
   /** Returns the original serialized field (ignores the current changes).\n
    * Returns an empty string if the field is not in the pool (num > size). */
   const char* cstringOriginal (uint32_t num) const {
     gstring gs (original (_impl->_pool, num));
     return gs.empty() ? "" : gs.data(); // All fields in the _pool are 0-terminated.
   }
-  /** Returns the field. */
-  const gstring current (uint32_t num) const {
+  /** Returns the field.
+   * @param ref Return a zero-copy view. The view becomes invalid after the value has been changed or when the pool's `Impl` is destroyed. */
+  const gstring current (uint32_t num, bool ref = false) const {
     const Impl* impl = _impl.get(); if (!impl) return gstring();
-    if (num < impl->_changed.size() && impl->_changed[num]) return impl->_changes[num];
+    if (num < impl->_changed.size() && impl->_changed[num]) {
+      const gstring& value = impl->_changes[num]; return ref ? value.ref() : value;}
     return original (impl->_pool, num);
   }
   /** Set the new value of the field. */
