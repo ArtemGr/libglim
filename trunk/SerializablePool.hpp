@@ -193,7 +193,7 @@ public:
    * @param visitor must return `true` to serialize the field back to the pool.
    */
   template<typename T> void with (uint32_t num, std::function<bool(T&)> visitor) {
-    const gstring& fromBytes = current (num);
+    const gstring& fromBytes = current (num, true);
     T value; if (fromBytes.length()) ldbDeserialize (fromBytes, value);
     if (visitor (value)) serialize (num, value, 16 + fromBytes.length() * 2);
   }
