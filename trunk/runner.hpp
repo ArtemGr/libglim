@@ -190,8 +190,8 @@ public:
 
   /** Wait for the operation to complete, then call the `handler`, then free the `curl`. */
   void multi (CURL* curl, handler_t handler) {
-    std::lock_guard<std::recursive_mutex> lock (_mutex);
-    _handlers.insert (std::make_pair (curl, std::make_pair (handler, event_t (nullptr, nullptr))));
+    { std::lock_guard<std::recursive_mutex> lock (_mutex);
+      _handlers.insert (std::make_pair (curl, std::make_pair (handler, event_t (nullptr, nullptr)))); }
     curl_multi_add_handle (_curlm, curl);
   }
   /** Register a new job to be run on the thread loop. */
@@ -214,19 +214,21 @@ public:
   }
   /** Invoked automatically from a libevent timer; can also be invoked manually. */
   void run() {
-    std::lock_guard<std::recursive_mutex> lock (_mutex);
-    //std::cout << __LINE__ << ',' << ms() << ": run" << std::endl;
+    _mutex.lock();
     checkForFinishedCurlJobs();
-    // Run non-CURL jobs.
+    // Run non-CURL jobs. Copy jobs into a local array in order not to run them with the `_mutex` locked.
     struct timespec ct; clock_gettime (CLOCK_MONOTONIC, &ct);
-    auto it = _jobs.begin(), end = _jobs.end(); while (it != end) try {
-      auto jobIt = it++;
-      if (shouldRun (*jobIt, ct))
-        if (!jobIt->second.job (jobIt->second))
-          _jobs.erase (jobIt);
+    JobInfo jobs[_jobs.size()]; gstring jobNames[_jobs.size()]; int jn = -1; {
+      for (auto it = _jobs.begin(), end = _jobs.end(); it != end; ++it) if (shouldRun (*it, ct)) {
+        ++jn; jobNames[jn] = it->first; jobs[jn] = it->second;
+    } }
+    _mutex.unlock();
+
+    for (; jn >= 0; --jn) try {
+      if (!jobs[jn].job (jobs[jn])) removeJob (jobNames[jn]);
     } catch (const std::exception& ex) {
       char eBuf[512]; gstring err (sizeof(eBuf), eBuf, false, 0);
-      err << "glim::Runner: error in job " << it->first << ": " << ex.what();
+      err << "glim::Runner: error in job " << jobNames[jn] << ": " << ex.what();
       _errlog (err.c_str());
     }
     restartTimer();
