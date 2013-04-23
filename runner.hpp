@@ -233,6 +233,9 @@ public:
     }
     restartTimer();
   }
+
+  /** Expose CURLM. Useful for curl_multi_setopt (http://curl.haxx.se/libcurl/c/curl_multi_setopt.html). */
+  CURLM* curlm() const {return _curlm;}
 };
 
 } // namespace glim
