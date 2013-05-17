@@ -32,6 +32,8 @@ struct hgot {
   size_t bodyLength() const {return body ? evbuffer_get_length (body) : 0;}
   /** Warning: the string is NOT zero-terminated. */
   const char* bodyData() {return body ? (const char*) evbuffer_pullup (body, -1) : "";}
+  /** Returns a zero-terminated string. Warning: modifies the `body` every time in order to add the terminator. */
+  const char* cbody() {if (!body) return ""; evbuffer_add (body, "", 1); return (const char*) evbuffer_pullup (body, -1);}
 #ifdef _GSTRING_INCLUDED
   glim::gstring gbody() {
     if (!body) return glim::gstring();
