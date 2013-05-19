@@ -20,6 +20,7 @@ inline size_t curlWriteToString (void *buffer, size_t size, size_t nmemb, void *
   return size * nmemb;};
 
 inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *userdata);
+inline size_t curlReadFromGString (void *ptr, size_t size, size_t nmemb, void *userdata);
 inline size_t curlWriteHeader (void *ptr, size_t size, size_t nmemb, void *curlPtr);
 
 /**
@@ -45,7 +46,8 @@ class Curl {
   CURL* _curl;
   struct curl_slist *_headers;
   std::function<void (const char* header, int len)> _headerListener;
-  std::string _send; ///< We're using `std::string` instead of `gstring` in order to support payloads larger than 16 MiB.
+  std::string _sendStr; ///< We're using `std::string` instead of `gstring` in order to support payloads larger than 16 MiB.
+  glim::gstring _sendGStr; ///< `gstring::view` and `gstring::ref` allow us to zero-copy.
   uint32_t _sent;
   std::string _got;
   bool _needs_cleanup:1; ///< ~Curl will do `curl_easy_cleanup` if `true`.
@@ -63,7 +65,11 @@ class Curl {
 
   /** Stores the content to be sent into an `std::string` inside `Curl`.\n
    * In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
-  template<typename STR> Curl& send (STR&& text) {_send = std::forward<std::string> (text); _sent = 0; return *this;}
+  template<typename STR> Curl& send (STR&& text) {
+    _sendStr = std::forward<std::string> (text);
+    _sendGStr.clear();
+    _sent = 0;
+    return *this;}
 
   /** Adds "Content-Type" header into `_headers`. */
   Curl& contentType (const char* ct) {
@@ -91,10 +97,14 @@ class Curl {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
     curl_easy_setopt (_curl, CURLOPT_ERRORBUFFER, _errorBuf);
-    if (_send.size()) {
+    if (_sendStr.size() || _sendGStr.size()) {
       curl_easy_setopt (_curl, CURLOPT_UPLOAD, 1L); // http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTUPLOAD
-      curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _send.size());
-      curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromString);
+      if (_sendStr.size()) {
+        curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _sendStr.size());
+        curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromString);
+      } else {
+        curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _sendGStr.size());
+        curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromGString);}
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);}
     if (_headers)
       curl_easy_setopt (_curl, CURLOPT_HTTPHEADER, _headers); // http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTHTTPHEADER
@@ -112,9 +122,13 @@ class Curl {
     if (from) curl_easy_setopt (_curl, CURLOPT_MAIL_FROM, from);
     if (to) _headers = curl_slist_append (_headers, to);
     if (_headers) curl_easy_setopt (_curl, CURLOPT_MAIL_RCPT, _headers);
-    if (_send.size()) {
-      curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _send.size());
+    if (_sendStr.size()) {
+      curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _sendStr.size());
       curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromString);
+      curl_easy_setopt (_curl, CURLOPT_READDATA, this);
+    } else if (_sendGStr.size()) {
+      curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _sendGStr.size());
+      curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromGString);
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);
     }
     return *this;
@@ -154,10 +168,23 @@ class Curl {
     return status;}
 };
 
+template<> inline Curl& Curl::send<gstring> (gstring&& text) {
+  _sendStr.clear();
+  _sendGStr = std::move (text);
+  _sent = 0;
+  return *this;}
+
 inline size_t curlReadFromString (void *ptr, size_t size, size_t nmemb, void *userdata) {
   Curl* curl = (Curl*) userdata;
-  size_t len = std::min (curl->_send.size() - curl->_sent, size * nmemb);
-  if (len) memcpy (ptr, curl->_send.data() + curl->_sent, len);
+  size_t len = std::min (curl->_sendStr.size() - curl->_sent, size * nmemb);
+  if (len) memcpy (ptr, curl->_sendStr.data() + curl->_sent, len);
+  curl->_sent += len;
+  return len;}
+
+inline size_t curlReadFromGString (void *ptr, size_t size, size_t nmemb, void *userdata) {
+  Curl* curl = (Curl*) userdata;
+  size_t len = std::min (curl->_sendGStr.size() - curl->_sent, size * nmemb);
+  if (len) memcpy (ptr, curl->_sendGStr.data() + curl->_sent, len);
   curl->_sent += len;
   return len;}
 
