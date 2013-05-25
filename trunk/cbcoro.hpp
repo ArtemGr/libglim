@@ -52,7 +52,7 @@ class CBCoro: public CBCoroStatic {
   virtual ~CBCoro() {
     VALGRIND_STACK_DEREGISTER (_stack);
   }
-  /** Starts the coroutine on the `_stack` (makecontext, swapcontext). */
+  /** Starts the coroutine on the `_stack` (makecontext, swapcontext), calling the `run`. */
   void cbcStart() {
     ucontext_t back; _context.uc_link = &back;
     makecontext (&_context, (void(*)()) cbcRun, 1, (intptr_t) this);
@@ -64,6 +64,12 @@ class CBCoro: public CBCoroStatic {
   static void cbcRun (CBCoro* cbCoro) {
     cbCoro->run();
   }
+  /** Relinquish the control to the original owner of the thread, restoring its stack. */
+  void cbcReturn() {
+    ucontext_t* returnTo = _returnTo;
+    if (returnTo != nullptr) {_returnTo = nullptr; setcontext (returnTo);}
+  }
+  /** Must call `cbcReturn` instead of `return`. */
   virtual void run() = 0;
 
   /** Captures the stack, runs the `fun` and relinquish the control to `_returnTo`.\n
@@ -83,9 +89,7 @@ class CBCoro: public CBCoroStatic {
         _invokeFromYield = false;
       } else {
         // So, the `fun` took measures to revive us later, it's time for us to go into torpor and return the control to whoever we've borrowed it from.
-        ucontext_t* returnTo = _returnTo;
-        _returnTo = nullptr;
-        if (returnTo != nullptr) setcontext (returnTo);
+        cbcReturn();
       }
     }
   }

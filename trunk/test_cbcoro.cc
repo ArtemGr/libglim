@@ -53,7 +53,7 @@ struct RemoveFroples: public CBCoro<4096> {
     }
     deleteLater (this);
     printf ("RF: finish! _returnTo is: %li\n", (intptr_t) _returnTo);
-    if (_returnTo != nullptr) setcontext (_returnTo);
+    cbcReturn();
   };
 };
 
