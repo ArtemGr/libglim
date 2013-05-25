@@ -55,6 +55,13 @@ test_ldb: test_ldb.cc ldb.hpp
 	  -lleveldb -lboost_serialization-mt -lboost_filesystem-mt -lboost_system-mt
 	valgrind -q --leak-check=yes bin/test_ldb
 
+bin/test_cbcoro: test_cbcoro.cc
+	mkdir -p bin
+	g++ $(CXXFLAGS) test_cbcoro.cc -o bin/test_cbcoro -pthread
+
+test_cbcoro: bin/test_cbcoro
+	bin/test_cbcoro
+
 install:
 	mkdir -p ${INSTALL2}/
 	cp sqlite.hpp ${INSTALL2}/
@@ -69,6 +76,7 @@ install:
 	cp ldb.hpp ${INSTALL2}/
 	cp exception.hpp ${INSTALL2}/
 	cp SerializablePool.hpp ${INSTALL2}/
+	cp cbcoro.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
