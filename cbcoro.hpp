@@ -39,10 +39,10 @@ class CBCoro: public CBCoroStatic {
  protected:
   ucontext_t _context;
   ucontext_t* _returnTo;
-  bool _invokedFromYield; ///< True if `invokeFromCallback` was called directly from `yieldForCallback`.
+  bool _invokeFromYield; ///< True if `invokeFromCallback` was called directly from `yieldForCallback`.
+  bool _yieldFromInvoke; ///< True if `yieldForCallback` now runs from `invokeFromCallback`.
   char _stack[STACK_SIZE];
-  CBCoro(): _returnTo (nullptr), _invokedFromYield (false) {
-    printf ("CBCoro constructor\n");
+  CBCoro(): _returnTo (nullptr), _invokeFromYield (false), _yieldFromInvoke (false) {
     if (getcontext (&_context)) GTHROW ("!getcontext");
     _context.uc_stack.ss_sp = _stack;
     _context.uc_stack.ss_size = STACK_SIZE;
@@ -50,30 +50,58 @@ class CBCoro: public CBCoroStatic {
     VALGRIND_STACK_REGISTER (_stack, _stack + STACK_SIZE);
   }
   virtual ~CBCoro() {
-    printf ("CBCoro destructor\n");
     VALGRIND_STACK_DEREGISTER (_stack);
   }
   /** Starts the coroutine on the `_stack` (makecontext, swapcontext). */
   void cbcStart() {
     ucontext_t back; _context.uc_link = &back;
-    printf ("cbcStart; invoking cbcRun with cbCoro: %li\n", (intptr_t) this);
     makecontext (&_context, (void(*)()) cbcRun, 1, (intptr_t) this);
     // Since we have to "return" from inside the `yieldForCallback`,
     // we're not actually using the `_context.uc_link` and `return`, we use `setcontext (_returnTo)` instead.
     _returnTo = &back;
-    swapcontext (&back, &_context);
-    printf ("cbcStart; returned from cbcRun\n");
+    swapcontext (&back, &_context); // Now our stack lives and the caller stack is no longer in control.
   }
   static void cbcRun (CBCoro* cbCoro) {
-    printf ("cbcRun; cbCoro: %li\n", (intptr_t) cbCoro);
     cbCoro->run();
   }
   virtual void run() = 0;
+
   /** Captures the stack, runs the `fun` and relinquish the control to `_returnTo`.\n
    * This method will never "return" by itself, in order for it to "return" the
    * `fun` MUST call `invokeFromCallback`, maybe later and from a different stack. */
   template <typename F> void yieldForCallback (F fun) {
-    printf ("yieldForCallback; %i\n", __LINE__);
-    fun();
+    _yieldFromInvoke = false;
+    if (getcontext (&_context)) GTHROW ("!getcontext"); // Capture.
+    if (_yieldFromInvoke) {
+      // We're now in the future, revived by the `invokeFromCallback`.
+      // All we do now is "return" to the caller whose stack we captured earlier.
+    } else {
+      // We're still in the present, still have some work to do.
+      fun(); // The `fun` is supposed to do something resulting in the `invokeFromCallback` being called later.
+      if (_invokeFromYield) {
+        // The `fun` used the `invokeFromCallback` directly, not resorting to callbacks, meaning we don't have to do our magick.
+        _invokeFromYield = false;
+      } else {
+        // So, the `fun` took measures to revive us later, it's time for us to go into torpor and return the control to whoever we've borrowed it from.
+        ucontext_t* returnTo = _returnTo;
+        _returnTo = nullptr;
+        if (returnTo != nullptr) setcontext (returnTo);
+      }
+    }
+  }
+ public:
+  /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
+  void invokeFromCallback() {
+    if (_returnTo != nullptr) {
+      // We have not yet "returned" from the `yieldForCallback`,
+      // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
+      // In that case we must DO NOTHING, we must simply continue running on the current stack.
+      _invokeFromYield = true; // Tells `yieldForCallback` to do nothing.
+    } else {
+      // Revive the CBCoro, letting it to continue from where it was suspended in `yieldForCallback`.
+      ucontext_t cbContext; _returnTo = &cbContext; _yieldFromInvoke = true;
+      if (swapcontext (&cbContext, &_context)) GTHROW ("!swapcontext");
+      if (_returnTo == &cbContext) _returnTo = nullptr;
+    }
   }
 };
