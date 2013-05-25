@@ -30,45 +30,23 @@ void esDelete (int frople, std::function<void(int)> cb) {
 
 struct RemoveFroples: public CBCoro<4096> {
   const char* _argument;
-  bool _fromCB;
-  RemoveFroples (const char* argument): _argument (argument), _fromCB (false) {
+  RemoveFroples (const char* argument): _argument (argument) {
     printf ("RF: constructor\n");
     cbcStart();
   }
   virtual void run() override {
-    printf ("RF: run\n");
     for (int i = 1; i <= 4; ++i) {
       printf ("RF: Removing frople %i...\n", i);
       yieldForCallback ([&]() {
-        printf ("RF: in yieldForCallback; %i\n", __LINE__);
-        _fromCB = false;
-        if (getcontext (&_context)) GTHROW ("!getcontext"); // Capture.
-        if (_fromCB) {
-          printf ("RF: in future; %i; _returnTo is: %li\n", __LINE__, (intptr_t) _returnTo);
-        } else { // If still in the present.
-          printf ("RF: in present; %i; _returnTo is: %li\n", __LINE__, (intptr_t) _returnTo);
-//          esDelete (i, [this](int frople) {
-//            printf ("RF,CB: frople %i; resuming RemoveFroples; _returnTo is: %li.\n", frople, (intptr_t) _returnTo);
-            if (_returnTo != nullptr) {
-              // We have not yet "returned" from the `yieldForCallback`,
-              // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
-              // In that case we must DO NOTHING, we must simply continue running on the current stack.
-              _invokedFromYield = true;
-            } else {
-              ucontext_t cbContext; _returnTo = &cbContext; _fromCB = true;
-              if (swapcontext (&cbContext, &_context)) GTHROW ("!swapcontext");
-              if (_returnTo == &cbContext) _returnTo = nullptr;
-            }
-//          });
-          if (_invokedFromYield) {
-            printf ("RF: returning; to the current stack, because of _invokedFromYield\n");
-            _invokedFromYield = false;
-          } else {
-            printf ("RF: returning; _returnTo is: %li\n", (intptr_t) _returnTo);
-            ucontext_t* returnTo = _returnTo;
-            _returnTo = nullptr;
-            if (returnTo != nullptr) setcontext (returnTo);
-          }
+        if (i != 2) {
+          // Sometimes we use a callback.
+          esDelete (i, [this](int frople) {
+            printf ("RF,CB: frople %i.\n", frople);
+            invokeFromCallback();
+          });
+        } else {
+          // Sometimes we don't use a callback.
+          invokeFromCallback();
         }
       });
       printf ("RF: Returned from callback; _returnTo is: %li\n", (intptr_t) _returnTo);
