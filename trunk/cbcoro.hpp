@@ -41,9 +41,6 @@ class CBCoro: public CBCoroStatic {
  protected:
   ucontext_t _context;
   ucontext_t* _returnTo;
-  /** Set in `invokeFromCallback`.\n
-   * `void` should be safe because of the captured deteler, see http://stackoverflow.com/questions/11624131/casting-shared-ptrt-to-shared-ptrvoid */
-  std::shared_ptr<void> _valueFromCB;
   bool _invokeFromYield; ///< True if `invokeFromCallback` was called directly from `yieldForCallback`.
   bool _yieldFromInvoke; ///< True if `yieldForCallback` now runs from `invokeFromCallback`.
   char _stack[STACK_SIZE];
@@ -104,9 +101,6 @@ class CBCoro: public CBCoroStatic {
       }
     }
   }
-  template <typename R> std::shared_ptr<R> valueFromCB() const {
-    return std::static_pointer_cast<R> (_valueFromCB);
-  }
  public:
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
   template <typename R> void invokeFromCallback (const std::shared_ptr<R>& ret) {
@@ -123,6 +117,4 @@ class CBCoro: public CBCoroStatic {
       if (_returnTo == &cbContext) _returnTo = nullptr;
     }
   }
-  /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
-  void invokeFromCallback() {invokeFromCallback (std::shared_ptr<void>());}
 };
