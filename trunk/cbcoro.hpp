@@ -102,7 +102,7 @@ class CBCoro: public CBCoroStatic {
   }
  public:
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
-  template <typename R> void invokeFromCallback() {
+  void invokeFromCallback() {
     if (_returnTo != nullptr) {
       // We have not yet "returned" from the `yieldForCallback`,
       // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
