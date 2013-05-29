@@ -6,6 +6,7 @@
 #include <valgrind/valgrind.h>
 #include <glim/exception.hpp>
 #include <mutex>
+#include <memory>
 
 /** A helper for `CBCoro`. */
 class CBCoroStatic {
@@ -22,6 +23,7 @@ class CBCoroStatic {
   /** Helps the CBCoro instance to delete itself while not stepping on its own toes.
    * @param cbco The instance to remove later; can be nullptr to just delete the previous one. */
   static void deleteLater (CBCoroStatic* cbco) {
+    // TODO: Use an intrusive list (right in CBCoroStatic) with a configurable timeout.
     std::lock_guard<std::mutex> lock (maintanceMutex());
     CBCoroStatic* prev = deleteQueue(); if (prev != nullptr) delete prev;
     deleteQueue() = cbco;
@@ -39,11 +41,20 @@ class CBCoro: public CBCoroStatic {
  protected:
   ucontext_t _context;
   ucontext_t* _returnTo;
+  /** Set in `invokeFromCallback`.\n
+   * `void` should be safe because of the captured deteler, see http://stackoverflow.com/questions/11624131/casting-shared-ptrt-to-shared-ptrvoid */
+  std::shared_ptr<void> _valueFromCB;
   bool _invokeFromYield; ///< True if `invokeFromCallback` was called directly from `yieldForCallback`.
   bool _yieldFromInvoke; ///< True if `yieldForCallback` now runs from `invokeFromCallback`.
   char _stack[STACK_SIZE];
   CBCoro(): _returnTo (nullptr), _invokeFromYield (false), _yieldFromInvoke (false) {
     if (getcontext (&_context)) GTHROW ("!getcontext");
+    // TODO: Allocate and free the stack in separate virtual methods, in order to make the allocation extendable.
+    // TODO: Allocate the stack with mmap or memalign, making the first and last pages PROT_NONE with mprotect,
+    //       in order to simplify stack overflow and underflow detection.
+    //       cf. http://man7.org/linux/man-pages/man2/mprotect.2.html
+    //       cf. http://man7.org/linux/man-pages/man3/posix_memalign.3.html
+    //       Even a simple malloc will make the over/underflows detectable by valgrind & co.
     _context.uc_stack.ss_sp = _stack;
     _context.uc_stack.ss_size = STACK_SIZE;
     #pragma GCC diagnostic ignored "-Wunused-value"
@@ -70,7 +81,7 @@ class CBCoro: public CBCoroStatic {
     if (returnTo != nullptr) {_returnTo = nullptr; setcontext (returnTo);}
   }
   /** Must call `cbcReturn` instead of `return`. */
-  virtual void run() = 0;
+  virtual void run() throw() = 0;
 
   /** Captures the stack, runs the `fun` and relinquish the control to `_returnTo`.\n
    * This method will never "return" by itself, in order for it to "return" the
@@ -93,9 +104,13 @@ class CBCoro: public CBCoroStatic {
       }
     }
   }
+  template <typename R> std::shared_ptr<R> valueFromCB() const {
+    return std::static_pointer_cast<R> (_valueFromCB);
+  }
  public:
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
-  void invokeFromCallback() {
+  template <typename R> void invokeFromCallback (const std::shared_ptr<R>& ret) {
+    _valueFromCB = std::static_pointer_cast<void> (ret);
     if (_returnTo != nullptr) {
       // We have not yet "returned" from the `yieldForCallback`,
       // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
@@ -108,4 +123,6 @@ class CBCoro: public CBCoroStatic {
       if (_returnTo == &cbContext) _returnTo = nullptr;
     }
   }
+  /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
+  void invokeFromCallback() {invokeFromCallback (std::shared_ptr<void>());}
 };

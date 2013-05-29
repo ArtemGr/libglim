@@ -34,7 +34,7 @@ struct RemoveFroples: public CBCoro<4096> {
     printf ("RF: constructor\n");
     cbcStart();
   }
-  virtual void run() override {
+  virtual void run() throw() override {
     for (int i = 1; i <= 4; ++i) {
       printf ("RF: Removing frople %i...\n", i);
       yieldForCallback ([&]() {
@@ -42,14 +42,14 @@ struct RemoveFroples: public CBCoro<4096> {
           // Sometimes we use a callback.
           esDelete (i, [this](int frople) {
             printf ("RF,CB: frople %i.\n", frople);
-            invokeFromCallback();
+            invokeFromCallback (std::make_shared<int> (frople));
           });
         } else {
           // Sometimes we don't use a callback.
           invokeFromCallback();
         }
       });
-      printf ("RF: Returned from callback; _returnTo is: %li\n", (intptr_t) _returnTo);
+      printf ("RF: Returned from callback; _returnTo is: %li; frople %i\n", (intptr_t) _returnTo, _valueFromCB ? *valueFromCB<int>() : 0);
     }
     deleteLater (this);
     printf ("RF: finish! _returnTo is: %li\n", (intptr_t) _returnTo);
