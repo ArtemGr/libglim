@@ -6,7 +6,6 @@
 #include <valgrind/valgrind.h>
 #include <glim/exception.hpp>
 #include <mutex>
-#include <memory>
 
 /** A helper for `CBCoro`. */
 class CBCoroStatic {
@@ -103,8 +102,7 @@ class CBCoro: public CBCoroStatic {
   }
  public:
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
-  template <typename R> void invokeFromCallback (const std::shared_ptr<R>& ret) {
-    _valueFromCB = std::static_pointer_cast<void> (ret);
+  template <typename R> void invokeFromCallback() {
     if (_returnTo != nullptr) {
       // We have not yet "returned" from the `yieldForCallback`,
       // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
