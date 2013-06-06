@@ -297,6 +297,12 @@ public:
   }
   int32_t find (const char* str, int32_t pos = 0) const {return find (str, pos, strlen (str));}
 
+  /** Index of `ch` inside the string or -1 if not found. */
+  int32_t indexOf (char ch) const {
+    void* ret = memchr (_buf, ch, size());
+    return ret == nullptr ? -1 : (char*) ret - (char*) _buf;
+  }
+
   // Helps to workaround the "statement has no effect" warning in `GSTRING_ON_STACK`.
   gstring& self() {return *this;}
 
