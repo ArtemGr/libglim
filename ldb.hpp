@@ -100,22 +100,24 @@ struct Ldb {
     IteratorEntry (leveldb::Iterator* lit, bool valid = false): _lit (lit), _valid (valid) {}
     ~IteratorEntry() {delete _lit;}
 
-    /** Zero-copy view of the current key bytes. Should *not* be used after the Iterator is changed or destroyed. */
-    const gstring keyView() const {
+    /** Zero-copy view of the current key bytes. Should *not* be used after the Iterator is changed or destroyed.
+     * @param ref If true then the *copies* of the returned gstring will keep pointing to LevelDB memory which is valid only until the iterator changes. */
+    const gstring keyView (bool ref = false) const {
       if (!_valid) return gstring();
       const leveldb::Slice& key = _lit->key();
-      return gstring (0, (void*) key.data(), false, key.size(), true);} // Zero copy.
-    /** Zero-copy view of the current value bytes. Should *not* be used after the Iterator is changed or destroyed. */
-    const gstring valueView() const {
+      return gstring (0, (void*) key.data(), false, key.size(), ref);} // Zero copy.
+    /** Zero-copy view of the current value bytes. Should *not* be used after the Iterator is changed or destroyed.
+     * @param ref If true then the *copies* of the returned gstring will keep pointing to LevelDB memory which is valid only until the iterator changes. */
+    const gstring valueView (bool ref = false) const {
       if (!_valid) return gstring();
       const leveldb::Slice& val = _lit->value();
-      return gstring (0, (void*) val.data(), false, val.size(), true);} // Zero copy.
+      return gstring (0, (void*) val.data(), false, val.size(), ref);} // Zero copy.
     /** Deserialize into `key`. */
-    template <typename T> void getKey (T& key) const {ldbDeserialize (keyView(), key);}
+    template <typename T> void getKey (T& key) const {ldbDeserialize (keyView (true), key);}
     /** Deserialize the key into a temporary and return it. */
     template <typename T> T getKey() const {T key; getKey (key); return key;}
     /** Deserialize into `value`. */
-    template <typename T> void getValue (T& value) const {ldbDeserialize (valueView(), value);}
+    template <typename T> void getValue (T& value) const {ldbDeserialize (valueView (true), value);}
     /** Deserialize the value into a temporary and return it. */
     template <typename T> T getValue() const {T value; getValue (value); return value;}
   };
