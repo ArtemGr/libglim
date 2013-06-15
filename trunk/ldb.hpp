@@ -28,6 +28,7 @@ limitations under the License.
 
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
+#include <leveldb/filter_policy.h>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/serialization/serialization.hpp>
@@ -89,6 +90,7 @@ template <> inline void ldbDeserialize<std::string> (const gstring& bytes, std::
  */
 struct Ldb {
   std::shared_ptr<leveldb::DB> _db;
+  std::shared_ptr<const leveldb::FilterPolicy> _filter;
 
   struct IteratorEntry { ///< Something to be `dereference`d from the Iterator. Also a pImpl allowing to keep the `_valid` and the `_lit` in sync.
     leveldb::Iterator* _lit;
@@ -281,6 +283,8 @@ struct Ldb {
     } else {
       leveldb::Options localOptions;
       localOptions.create_if_missing = true;
+      _filter.reset (leveldb::NewBloomFilterPolicy (8));
+      localOptions.filter_policy = _filter.get();
       status = leveldb::DB::Open (localOptions, path, &db);
     }
     if (!status.ok()) GNTHROW (LdbEx, std::string ("Ldb: Can't open ") + path + ": " + status.ToString());
@@ -333,6 +337,8 @@ struct Ldb {
     leveldb::Slice keySlice (kbytes.data(), kbytes.size());
 
     // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
+    // NB: "BloomFilter only helps for Get() calls" - https://groups.google.com/d/msg/leveldb/oEiDztqHiHc/LMY3tHxzRGAJ
+    //     "Apart from the lack of Bloom filter functionality, creating an iterator is really quite slow" - qpu2jSA8mCEJ
     std::unique_ptr<leveldb::Iterator> it (_db->NewIterator (options));
     it->Seek (keySlice); if (it->Valid()) {
       auto&& itKey = it->key();
