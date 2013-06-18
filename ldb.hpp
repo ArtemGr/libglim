@@ -330,25 +330,22 @@ struct Ldb {
     return false;
   }
 
+  /** Returns `true` and modifies `value` if `key` is found. */
   template <typename K, typename V> bool get (const K& key, V& value, leveldb::ReadOptions options = leveldb::ReadOptions()) {
     char kbuf[64]; // Allow up to 64 bytes to be serialized without heap allocations.
     gstring kbytes (sizeof (kbuf), kbuf, false, 0);
     ldbSerialize (kbytes, key);
     leveldb::Slice keySlice (kbytes.data(), kbytes.size());
 
-    // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
     // NB: "BloomFilter only helps for Get() calls" - https://groups.google.com/d/msg/leveldb/oEiDztqHiHc/LMY3tHxzRGAJ
     //     "Apart from the lack of Bloom filter functionality, creating an iterator is really quite slow" - qpu2jSA8mCEJ
-    std::unique_ptr<leveldb::Iterator> it (_db->NewIterator (options));
-    it->Seek (keySlice); if (it->Valid()) {
-      auto&& itKey = it->key();
-      if (itKey.size() == keySlice.size() && memcmp (itKey.data(), keySlice.data(), itKey.size()) == 0) {
-        auto&& vbytes = it->value();
-        ldbDeserialize (gstring (0, (void*) vbytes.data(), false, vbytes.size()), value);
-        return true;
-      }
-    }
-    return false;
+    std::string str;
+    leveldb::Status status (_db->Get (options, keySlice, &str));
+    if (status.ok()) {
+      ldbDeserialize (gstring (0, (void*) str.data(), false, str.size()), value);
+      return true;
+    } else if (status.IsNotFound()) return false;
+    else GTHROW ("Ldb.get: " + status.ToString());
   }
 
   template <typename K> void del (const K& key, leveldb::WriteBatch& batch) {
