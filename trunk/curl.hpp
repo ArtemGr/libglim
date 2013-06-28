@@ -64,7 +64,7 @@ class Curl {
   }
 
   /** Stores the content to be sent into an `std::string` inside `Curl`.\n
-   * In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
+   * NB: In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
   template<typename STR> Curl& send (STR&& text) {
     _sendStr = std::forward<std::string> (text);
     _sendGStr.clear();
@@ -134,7 +134,15 @@ class Curl {
     return *this;
   }
 
-  /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method. */
+  /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method.\n
+   * Can be used both before and after the `http` method.\n
+   * Example sending a POST request to ElasticSearch: \code
+   *   glim::Curl curl;
+   *   curl.send (C2GSTRING (R"({"query":{"match_all":{}},"facets":{"tags":{"terms":{"field":"tags","size":1000}}}})"));
+   *   curl.method ("POST") .http ("http://127.0.0.1:9200/froples/frople/_search", 120);
+   *   if (curl.verbose().go().status() != 200) GTHROW ("Error fetching tags: " + std::to_string (curl.status()) + ", " + curl.str());
+   *   cout << curl.gstr() << endl;
+   * \endcode */
   Curl& method (const char* method) {
     curl_easy_setopt (_curl, CURLOPT_CUSTOMREQUEST, method);
     return *this;
@@ -147,6 +155,12 @@ class Curl {
     curl_easy_setopt (_curl, CURLOPT_HEADERFUNCTION, curlWriteHeader);
     curl_easy_setopt (_curl, CURLOPT_WRITEHEADER, this);
     _headerListener = listener;
+    return *this;
+  }
+
+  /** Whether to print debug information to CURLOPT_STDERR. */
+  Curl& verbose (bool on = true) {
+    curl_easy_setopt (_curl, CURLOPT_VERBOSE, on ? 1L : 0L);
     return *this;
   }
 
@@ -168,6 +182,8 @@ class Curl {
     return status;}
 };
 
+/** Moves the content to be sent into a `glim::gstring` inside `Curl`.\n
+ * NB: In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
 template<> inline Curl& Curl::send<gstring> (gstring&& text) {
   _sendStr.clear();
   _sendGStr = std::move (text);
