@@ -77,6 +77,7 @@ install:
 	cp exception.hpp ${INSTALL2}/
 	cp SerializablePool.hpp ${INSTALL2}/
 	cp cbcoro.hpp ${INSTALL2}/
+	cp raii.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
