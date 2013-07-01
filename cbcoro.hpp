@@ -2,6 +2,9 @@
 // http://www.boost.org/doc/libs/1_53_0/libs/context/doc/html/index.html
 // g++ -std=c++11 -O1 -Wall -g test_cbcoro.cc -pthread && ./a.out
 
+// NB: There is now a coroutine support in Boost ASIO which can be used to make asynchronous APIs look synchronous in a similar way:
+//     https://svn.boost.org/trac/boost/changeset/84311
+
 #include <ucontext.h>
 #include <valgrind/valgrind.h>
 #include <glim/exception.hpp>
