@@ -3,7 +3,10 @@ namespace glim {
 
 // http://stackoverflow.com/questions/2121607/any-raii-template-in-boost-or-c0x/
 
-/** RAII helper. Keeps the functor and runs it in the destructor. */
+/** RAII helper. Keeps the functor and runs it in the destructor.
+ * Example: \code
+ *   auto unmap = raiiFun ([&]() {munmap (fd, size);});
+ * \endcode */
 template<typename Fun> struct RAIIFun {
   Fun _fun;
   RAIIFun (RAIIFun&&) = default;

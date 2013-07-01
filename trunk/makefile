@@ -9,7 +9,11 @@ all: test
 help:
 	@echo "make test\nmake install\nmake uninstall\nmake clean"
 
-test: test_sqlite test_gstring test_runner
+doc: doxyconf *.hpp
+	mkdir -p doc
+	doxygen doxyconf
+
+test: test_sqlite test_gstring test_runner test_exception test_ldb
 
 test_sqlite: bin/test_sqlite
 	cp bin/test_sqlite /tmp/libglim_test_sqlite && chmod +x /tmp/libglim_test_sqlite && /tmp/libglim_test_sqlite && rm -f /tmp/libglim_test_sqlite
@@ -40,20 +44,20 @@ bin/test_runner: test_runner.cc runner.hpp curl.hpp
 	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_runner.cc -o bin/test_runner -levent -levent_pthreads -lcurl
 
 test_runner: bin/test_runner
-	valgrind -q --leak-check=yes bin/test_runner
+	valgrind -q bin/test_runner
 
 bin/test_exception: test_exception.cc exception.hpp
 	mkdir -p bin
 	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_exception.cc -o bin/test_exception -ldl -rdynamic
 
 test_exception: bin/test_exception
-	valgrind -q --leak-check=yes bin/test_exception
+	valgrind -q bin/test_exception
 
 test_ldb: test_ldb.cc ldb.hpp
 	mkdir -p bin
 	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_ldb.cc -o bin/test_ldb \
 	  -lleveldb -lboost_serialization-mt -lboost_filesystem-mt -lboost_system-mt
-	valgrind -q --leak-check=yes bin/test_ldb
+	valgrind -q bin/test_ldb
 
 bin/test_cbcoro: test_cbcoro.cc
 	mkdir -p bin
@@ -65,12 +69,12 @@ test_cbcoro: bin/test_cbcoro
 ql2.pb.h: /root/work/rethinkdb-1.6.1/src/rdb_protocol/ql2.proto
 	protoc --cpp_out=. -I=/root/work/rethinkdb-1.6.1/src/rdb_protocol /root/work/rethinkdb-1.6.1/src/rdb_protocol/ql2.proto
 
-bin/test_rethinkdb: test_rethinkdb.cc
+bin/test_rethinkdb: test_rethinkdb.cc rethinkdb.hpp
 	mkdir -p bin
 	g++ $(CXXFLAGS) test_rethinkdb.cc -o bin/test_rethinkdb -lboost_system-mt -lprotobuf -pthread
 
 test_rethinkdb: bin/test_rethinkdb
-	bin/test_rethinkdb
+	valgrind -q bin/test_rethinkdb
 
 install:
 	mkdir -p ${INSTALL2}/
@@ -95,5 +99,6 @@ uninstall:
 
 clean:
 	rm -rf bin/*
+	rm -rf doc
 	rm -f /tmp/libglim_test_*
 	rm -f *.exe.stackdump

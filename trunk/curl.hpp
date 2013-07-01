@@ -1,6 +1,8 @@
-// Very simple header-only wrapper around libcurl.
-// See also: https://github.com/venam/Browser
-// See also: http://thread.gmane.org/gmane.comp.web.curl.library/1322 (this one uses a temporary file).
+/** \file
+ * Very simple header-only wrapper around libcurl.\n
+ * See also: https://github.com/venam/Browser\n
+ * See also: https://github.com/mologie/curl-asio\n
+ * See also: http://thread.gmane.org/gmane.comp.web.curl.library/1322 (this one uses a temporary file). */
 
 #ifndef _GLIM_CURL_INCLUDED
 #define _GLIM_CURL_INCLUDED

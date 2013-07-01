@@ -1,11 +1,15 @@
 #ifndef _GLIM_EXCEPTION_HPP_INCLUDED
 #define _GLIM_EXCEPTION_HPP_INCLUDED
 
-// Unfortunately this file is not entirely header-only
-// because the thread-local static variables aren't reliable across shared libraries in GCC 4.7.2.
-// Include the code into the `main` module with:
-// #define _GLIM_EXCEPTION_CODE
-// #include <glim/exception.hpp>
+/** \file
+ * Unfortunately this file is not entirely header-only
+ * because the thread-local static variables aren't reliable across shared libraries in GCC 4.7.2.
+ * Include the code into the `main` module with:
+ *
+ *     #define _GLIM_EXCEPTION_CODE
+ *     #include <glim/exception.hpp>
+ *
+ * Should be fixed with `thread_local` in [gcc-4.8](http://gcc.gnu.org/gcc-4.8/changes.html). */
 
 #include <stdexcept>
 #include <string>
@@ -69,6 +73,9 @@ typedef void (*exception_handler_fn)(void*);
 extern __thread exception_handler_fn EXCEPTION_HANDLER;
 extern __thread void* EXCEPTION_HANDLER_ARG;
 
+/**
+ * Exception with file and line information and optional stack trace capture.
+ */
 class Exception: public std::runtime_error {
  protected:
   const char* _file; int32_t _line;
