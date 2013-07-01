@@ -67,7 +67,7 @@ ql2.pb.h: /root/work/rethinkdb-1.6.1/src/rdb_protocol/ql2.proto
 
 bin/test_rethinkdb: test_rethinkdb.cc
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_rethinkdb.cc -o bin/test_rethinkdb -pthread
+	g++ $(CXXFLAGS) test_rethinkdb.cc -o bin/test_rethinkdb -lboost_system-mt -lprotobuf -pthread
 
 test_rethinkdb: bin/test_rethinkdb
 	bin/test_rethinkdb
@@ -88,7 +88,7 @@ install:
 	cp SerializablePool.hpp ${INSTALL2}/
 	cp cbcoro.hpp ${INSTALL2}/
 	cp raii.hpp ${INSTALL2}/
-	cp rethinkdb.hpp ${INSTALL2}/
+	cp rethinkdb.hpp ql2.pb.* ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
