@@ -74,7 +74,7 @@ inline void hgetCB (struct evhttp_request* req, void* ctx_){
 
 /**
   C++ wrapper around libevent's http client.
-  Example:
+  Example: \code
   hget (evbase, dnsbase) .setRequestBuilder ([](struct evhttp_request* req){
     evbuffer_add (req->output_buffer, "foo", 3);
     evhttp_add_header (req->output_headers, "Content-Length", "3");
@@ -82,7 +82,7 @@ inline void hgetCB (struct evhttp_request* req, void* ctx_){
     if (got.error) log_warn ("127.0.0.1:8080 " << strerror (got.error));
     else if (got.status != 200) log_warn ("127.0.0.1:8080 != 200");
     else log_info ("got " << evbuffer_get_length (got.body) << " bytes from /test: " << evbuffer_pullup (got.body, -1));
-  });
+  }); \endcode
  */
 class hget {
  public:

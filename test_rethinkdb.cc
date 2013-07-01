@@ -1,4 +1,4 @@
-#define _GLIM_EXCEPTION_CODE
+#define _GLIM_EXCEPTION_CODE // Include the code needed for glim::Exception.
 #include "rethinkdb.hpp"
 #include "gstring.hpp"
 #include "ql2.pb.h"
@@ -12,9 +12,10 @@ using std::cout; using std::endl; using std::flush;
 
 /**
  * Testing if we can work with the RethinkDB from C++.\n
- * RethinkDB protocol: https://github.com/rethinkdb/rethinkdb/blob/next/src/rdb_protocol/ql2.proto; see "make src/ql2.pb.h".
- * Client example (Python): https://github.com/neumino/rethinkdb-driver-development
- *   pro1453: python /root/work/rethinkdb-driver-development/test.py
+ * This method will connect to 127.0.0.1:28015 creating a "glimTest" database. \n
+ * RethinkDB protocol: https://github.com/rethinkdb/rethinkdb/blob/next/src/rdb_protocol/ql2.proto; see "make src/ql2.pb.h".\n
+ * Client example (Python): https://github.com/neumino/rethinkdb-driver-development\n
+ *   python rethinkdb-driver-development/test.py
  */
 void firstTest() {
   using std::string; using std::cout; using std::endl; using boost::asio::ip::tcp;
@@ -47,13 +48,16 @@ void firstTest() {
   rc = asio::read (sock, asio::buffer (responseBuf, responseSize), ec); if (ec.value()) GTHROW ("!read: " + ec.message()); assert (rc == responseSize);
   Response response; rc = response.ParseFromArray (responseBuf, responseSize); assert (rc == 1);
   if (response.type() == Response::CLIENT_ERROR || response.type() == Response::RUNTIME_ERROR) {
-    cout << "RethinkDB error: " << response.response().Get (0) .r_str() << endl;
-  } else cout << response.Utf8DebugString() << endl;
+    string error (response.response().Get (0) .r_str());
+    if (error != "Database `glimTest` already exists.") GTHROW ("!DB_CREATE: " + error);
+  }
 }
 
 int main () {
   cout << "Testing rethinkdb.hpp ... " << flush;
   firstTest();
+  auto rdb = glim::RethinkDB::create();
+  rdb.db ("glimTest");
   cout << "pass." << endl;
   return 0;
 }

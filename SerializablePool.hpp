@@ -6,7 +6,7 @@
 # include "ldb.hpp" // Reuse `ldbSerialize` and `ldbDeserialize` in the `with` method.
 #endif
 namespace glim {
-/** Serialization with lazy parsing: fields are accessed without "unpacking" the byte array.\n
+/** Serialization with lazy parsing: fields are accessed without "unpacking" the byte array.
  * Changes are stored separately, allowing the user to know exactly what fields has been changed and compare the old values to the new ones. */
 class SerializablePool {
 protected:

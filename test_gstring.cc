@@ -1,3 +1,4 @@
+#define _GLIM_EXCEPTION_CODE // Include the code needed for glim::Exception.
 #include "gstring.hpp"
 using glim::gstring;
 #include <assert.h>
