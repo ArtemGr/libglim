@@ -57,7 +57,7 @@ int main () {
   cout << "Testing rethinkdb.hpp ... " << flush;
   auto rdb = glim::RethinkDB::create();
   rdb.dbCreate ("glimTest");
-  //rdb.db ("glimTest");
+  rdb.db ("glimTest") .tableCreate ("test");
   cout << "pass." << endl;
   return 0;
 }
