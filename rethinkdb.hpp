@@ -27,16 +27,6 @@ protected:
   static std::string getError (const Response& response) {  // Must be `isError (response)`.
     return response.response().Get (0) .r_str();
   }
-  static void addOptArg (Term* term, const char* key, const char* value) {
-    Term_AssocPair* optArgs = term->add_optargs(); optArgs->set_key (key);
-    Term* optTerm = optArgs->mutable_val(); optTerm->set_type (Term::DATUM);
-    Datum* datum = optTerm->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (value);
-  }
-  static void addOptArg (Term* term, const char* key, double value) {
-    Term_AssocPair* optArgs = term->add_optargs(); optArgs->set_key (key);
-    Term* optTerm = optArgs->mutable_val(); optTerm->set_type (Term::DATUM);
-    Datum* datum = optTerm->mutable_datum(); datum->set_type (Datum::R_NUM); datum->set_r_num (value);
-  }
   int64_t nextToken() {return _token++;}
 public:
   RethinkDB (RethinkDB&&) = default;
@@ -59,6 +49,20 @@ public:
     tcp::socket sock (*io);
     sock.connect (asio::ip::basic_endpoint<tcp> (asio::ip::address_v4::from_string (ip), port));
     return RethinkDB (std::move (io), std::move (sock));
+  }
+
+  static void setDatumS (Term* term, const char* value) {
+    term->set_type (Term::DATUM); Datum* datum = term->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (value);
+  }
+  static void setDatumD (Term* term, double value) {
+    term->set_type (Term::DATUM); Datum* datum = term->mutable_datum(); datum->set_type (Datum::R_NUM); datum->set_r_num (value);
+  }
+  static void setDatumB (Term* term, bool value) {
+    term->set_type (Term::DATUM); Datum* datum = term->mutable_datum(); datum->set_type (Datum::R_BOOL); datum->set_r_bool (value);
+  }
+  static Term* addOptArg (Term* term, const char* key) {
+    Term_AssocPair* optArgs = term->add_optargs(); optArgs->set_key (key);
+    return optArgs->mutable_val();
   }
 
   /** Serialize and send the given query into the TCP/IP socket. */
@@ -132,15 +136,12 @@ public:
                       int cacheSize = 0, const char* datacenter = nullptr) {
       Query query; query.set_type (Query::START); query.set_token (_rdb->nextToken());
       Term* term = query.mutable_query(); term->set_type (Term::TABLE_CREATE);
-      { Term* args = term->add_args(); args->set_type (Term::DB);
-        Term* db = args->add_args(); db->set_type (Term::DATUM);
-        Datum* datum = db->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (_db);}
-      { Term* args = term->add_args(); args->set_type (Term::DATUM);
-        Datum* datum = args->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (tableName);}
-      if (primaryKey) addOptArg (term, "primary_key", primaryKey);
-      if (durability) addOptArg (term, "durability", durability);
-      if (cacheSize) addOptArg (term, "cache_size", cacheSize);
-      if (datacenter) addOptArg (term, "datacenter", datacenter);
+      { Term* db = term->add_args(); db->set_type (Term::DB); setDatumS (db->add_args(), _db);}
+      setDatumS (term->add_args(), tableName);
+      if (primaryKey) setDatumS (addOptArg (term, "primary_key"), primaryKey);
+      if (durability) setDatumS (addOptArg (term, "durability"), durability);
+      if (cacheSize) setDatumD (addOptArg (term, "cache_size"), cacheSize);
+      if (datacenter) setDatumS (addOptArg (term, "datacenter"), datacenter);
       _rdb->sendQuery (query);
       Response response (_rdb->waitForResponse (query.token()));
       if (response.type() == Response::SUCCESS_ATOM) return true;
@@ -154,6 +155,46 @@ public:
   struct Table {
     Db _db; const char* _table; bool _useOutdated;
     Table (Db db, const char* table, bool useOutdated): _db (db), _table (table), _useOutdated (useOutdated) {}
+
+    /**
+     * <a href="http://www.rethinkdb.com/api/#js:writing_data-insert">Insert JSON document into a table</a>.
+     * Accepts a single JSON document.\n
+     * You may also pass the optional argument durability with value 'hard' or 'soft', to override the table's default durability setting.
+     *
+     * Insert returns an object that contains the following attributes:
+     * * inserted - the number of documents that were succesfully inserted;
+     * * replaced - the number of documents that were updated when upsert is used;
+     * * unchanged - the number of documents that would have been modified, except that the new value was the same as the old value when doing an upsert;
+     * * errors - the number of errors encountered while inserting;
+     *   if errors where encountered while inserting, first_error contains the text of the first error;
+     * * generated_keys - a list of generated primary key values;
+     * * deleted and skipped - 0 for an insert operation.
+     *
+     * Example: \code
+     *   auto rdb = RethinkDB::create();
+     *   Term johnDoe; johnDoe.set_type (Term::MAKE_OBJ);
+     *   RethinkDB::setDatumS (RethinkDB::addOptArg (&johnDoe, "id"), "JohnDoe");
+     *   RethinkDB::setDatumS (RethinkDB::addOptArg (&johnDoe, "name"), "John");
+     *   rdb.db ("myDb") .table ("myTable") .insert (johnDoe);
+     * \endcode
+     *
+     * @param json A MAKE_OBJ Term: {type: MAKE_OBJ, optargs {key: "hero", val: {type: DATUM, datum: {type: R_STR, r_str: "John Doe"}}}}
+     */
+    Response insert (const Term& json, bool upsert = false, const char* durability = nullptr) {
+      Query query; query.set_type (Query::START); query.set_token (_db._rdb->nextToken());
+      Term* term = query.mutable_query(); term->set_type (Term::INSERT);
+      { Term* table = term->add_args(); table->set_type (Term::TABLE);
+        Term* db = table->add_args(); db->set_type (Term::DB);
+        setDatumS (db->add_args(), _db._db);
+        setDatumS (table->add_args(), _table); }
+      term->add_args()->CopyFrom (json);
+      setDatumB (addOptArg (term, "upsert"), upsert);
+      if (durability) setDatumS (addOptArg (term, "durability"), durability);
+      _db._rdb->sendQuery (query);
+      Response response (_db._rdb->waitForResponse (query.token()));
+      if (isError (response)) GTHROW ("RethinkDB::insert: " + getError (response));
+      return response;
+    }
   };
 
   /** <a href="http://www.rethinkdb.com/api/#js:selecting_data-db">Reference a database</a>.

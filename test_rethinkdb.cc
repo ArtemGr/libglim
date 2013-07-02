@@ -55,9 +55,14 @@ void firstTest() {
 
 int main () {
   cout << "Testing rethinkdb.hpp ... " << flush;
-  auto rdb = glim::RethinkDB::create();
+  using glim::RethinkDB;
+  auto rdb = RethinkDB::create();
   rdb.dbCreate ("glimTest");
-  rdb.db ("glimTest") .tableCreate ("test");
+  rdb.db ("glimTest") .tableCreate ("test", "id", "soft", 1);
+  Term johnDoe; johnDoe.set_type (Term::MAKE_OBJ);
+  RethinkDB::setDatumS (RethinkDB::addOptArg (&johnDoe, "id"), "JohnDoe");
+  RethinkDB::setDatumS (RethinkDB::addOptArg (&johnDoe, "hero"), "John Doe");
+  rdb.db ("glimTest") .table ("test") .insert (johnDoe);
   cout << "pass." << endl;
   return 0;
 }
