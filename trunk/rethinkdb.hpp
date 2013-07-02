@@ -22,9 +22,22 @@ protected:
   std::list<Response> _responses;  ///< Database responses whose tokens didn't immediately match the expected one. See RethinkDB::waitForResponse.
 
   static bool isError (const Response& response) {
-    return response.type() == Response::RUNTIME_ERROR || response.type() == Response::CLIENT_ERROR || response.type() == Response::COMPILE_ERROR;}
+    return response.type() == Response::RUNTIME_ERROR || response.type() == Response::CLIENT_ERROR || response.type() == Response::COMPILE_ERROR;
+  }
   static std::string getError (const Response& response) {  // Must be `isError (response)`.
-    return response.response().Get (0) .r_str();}
+    return response.response().Get (0) .r_str();
+  }
+  static void addOptArg (Term* term, const char* key, const char* value) {
+    Term_AssocPair* optArgs = term->add_optargs(); optArgs->set_key (key);
+    Term* optTerm = optArgs->mutable_val(); optTerm->set_type (Term::DATUM);
+    Datum* datum = optTerm->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (value);
+  }
+  static void addOptArg (Term* term, const char* key, double value) {
+    Term_AssocPair* optArgs = term->add_optargs(); optArgs->set_key (key);
+    Term* optTerm = optArgs->mutable_val(); optTerm->set_type (Term::DATUM);
+    Datum* datum = optTerm->mutable_datum(); datum->set_type (Datum::R_NUM); datum->set_r_num (value);
+  }
+  int64_t nextToken() {return _token++;}
 public:
   RethinkDB (RethinkDB&&) = default;
   RethinkDB (const RethinkDB&) = delete;
@@ -92,16 +105,57 @@ public:
     return Response(); // Never happens.
   }
 
+  struct Table;
+
+  /** Database. */
   struct Db {
     RethinkDB* _rdb; const char* _db;
     Db (RethinkDB* rdb, const char* db): _rdb (rdb), _db (db) {}
-    struct Table {
-      Db* _db; const char* _table; bool _useOutdated;
-      Table (Db* db, const char* table, bool useOutdated): _db (db), _table (table), _useOutdated (useOutdated) {}
-    };
     /** Reference a table. */
-    Table table (const char* table, bool useOutdated = false) {return Table (this, table, useOutdated);}
+    Table table (const char* table, bool useOutdated = false);
+
+    /**
+     * <a href="http://www.rethinkdb.com/api/#js:manipulating_tables-table_create">Create a table</a>.
+     * A RethinkDB table is a collection of JSON documents.
+     * If successful, the operation returns `true`.
+     * If a table with the same name already exists, the operation returns `false`.
+     * Note: that you can only use alphanumeric characters and underscores for the table name.
+     * When creating a table you can specify the following options:
+     * @param primaryKey the name of the primary key. The default primary key is "id";
+     * @param durability if set to "soft", this enables soft durability on this table:
+     *                   writes will be acknowledged by the server immediately and flushed to disk in the background.
+     *                   Default is "hard" (acknowledgement of writes happens after data has been written to disk);
+     * @param cacheSize set the cache size (in MB) to be used by the table. Default is 1024MB;
+     * @param datacenter the name of the datacenter this table should be assigned to.
+     */
+    bool tableCreate (const char* tableName, const char* primaryKey = nullptr, const char* durability = nullptr,
+                      int cacheSize = 0, const char* datacenter = nullptr) {
+      Query query; query.set_type (Query::START); query.set_token (_rdb->nextToken());
+      Term* term = query.mutable_query(); term->set_type (Term::TABLE_CREATE);
+      { Term* args = term->add_args(); args->set_type (Term::DB);
+        Term* db = args->add_args(); db->set_type (Term::DATUM);
+        Datum* datum = db->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (_db);}
+      { Term* args = term->add_args(); args->set_type (Term::DATUM);
+        Datum* datum = args->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (tableName);}
+      if (primaryKey) addOptArg (term, "primary_key", primaryKey);
+      if (durability) addOptArg (term, "durability", durability);
+      if (cacheSize) addOptArg (term, "cache_size", cacheSize);
+      if (datacenter) addOptArg (term, "datacenter", datacenter);
+      _rdb->sendQuery (query);
+      Response response (_rdb->waitForResponse (query.token()));
+      if (response.type() == Response::SUCCESS_ATOM) return true;
+      if (response.type() == Response::RUNTIME_ERROR && getError (response) == (std::string ("Table `") + tableName + "` already exists.")) return false;
+      if (isError (response)) GTHROW (std::string ("RethinkDB::tableCreate (") + tableName + "): " + getError (response));
+      GTHROW (response.DebugString());
+    }
   };
+
+  /** Table. */
+  struct Table {
+    Db _db; const char* _table; bool _useOutdated;
+    Table (Db db, const char* table, bool useOutdated): _db (db), _table (table), _useOutdated (useOutdated) {}
+  };
+
   /** <a href="http://www.rethinkdb.com/api/#js:selecting_data-db">Reference a database</a>.
    * Example: Before we can query a table we have to select the correct database.\n
    * `r.db("heroes").table("marvell")` */
@@ -113,13 +167,12 @@ public:
    * Example: Create a database named 'superheroes'.\n
    * `r.dbCreate("superheroes")`\n */
   bool dbCreate (const char* db) {
-    const int64_t token = ++_token;
-    Query query; query.set_type (Query::START); query.set_token (token);
+    Query query; query.set_type (Query::START); query.set_token (nextToken());
     Term* term = query.mutable_query(); term->set_type (Term::DB_CREATE);
     Term* args = term->add_args(); args->set_type (Term::DATUM);
     Datum* datum = args->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (db);
     sendQuery (query);
-    Response response (waitForResponse (token));
+    Response response (waitForResponse (query.token()));
     if (response.type() == Response::SUCCESS_ATOM) return true;
     if (response.type() == Response::RUNTIME_ERROR && getError (response) == (std::string ("Database `") + db + "` already exists.")) return false;
     if (isError (response)) GTHROW (std::string ("RethinkDB::createDb (") + db + "): " + getError (response));
@@ -127,5 +180,9 @@ public:
   }
 
 };
+
+inline RethinkDB::Table RethinkDB::Db::table (const char* table, bool useOutdated) {
+  return RethinkDB::Table (*this, table, useOutdated);
+}
 
 }
