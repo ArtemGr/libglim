@@ -55,9 +55,9 @@ void firstTest() {
 
 int main () {
   cout << "Testing rethinkdb.hpp ... " << flush;
-  firstTest();
   auto rdb = glim::RethinkDB::create();
-  rdb.db ("glimTest");
+  rdb.dbCreate ("glimTest");
+  //rdb.db ("glimTest");
   cout << "pass." << endl;
   return 0;
 }
