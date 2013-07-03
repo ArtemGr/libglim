@@ -246,6 +246,7 @@ public:
    * Example: Before we can query a table we have to select the correct database.\n
    * `r.db("heroes").table("marvell")` */
   Db db (const char* db) {return Db (this, db);}
+
   /** <a href="http://www.rethinkdb.com/api/#js:manipulating_databases-db_create">Create a database</a>.
    * A RethinkDB database is a collection of tables, similar to relational databases.\n
    * If successful, the operation returns `true`. If a database with the same name already exists the operation returns `false`.\n
@@ -254,15 +255,29 @@ public:
    * `r.dbCreate("superheroes")`\n */
   bool dbCreate (const char* db) {
     Query query; query.set_type (Query::START); query.set_token (nextToken());
-    Term* term = query.mutable_query(); term->set_type (Term::DB_CREATE);
-    Term* args = term->add_args(); args->set_type (Term::DATUM);
-    Datum* datum = args->mutable_datum(); datum->set_type (Datum::R_STR); datum->set_r_str (db);
+    Term* term = query.mutable_query(); term->set_type (Term::DB_CREATE); setDatumS (term->add_args(), db);
     sendQuery (query);
     Response response (waitForResponse (query.token()));
     if (response.type() == Response::SUCCESS_ATOM) return true;
     if (response.type() == Response::RUNTIME_ERROR && getError (response) == (std::string ("Database `") + db + "` already exists.")) return false;
     if (isError (response)) GTHROW (std::string ("RethinkDB::createDb (") + db + "): " + getError (response));
     GTHROW (response.DebugString());
+  }
+
+  /**
+   * <a href="http://www.rethinkdb.com/api/#js:manipulating_databases-db_drop">Drop a database</a>.
+   * The database, all its tables, and corresponding data will be deleted.\n
+   * If successful, the operation returns `true`. If the specified database doesn't exist it returns `false`.
+   */
+  bool dbDrop (const char* dbName) {
+    Query query; query.set_type (Query::START); query.set_token (nextToken());
+    Term* term = query.mutable_query(); term->set_type (Term::DB_DROP); setDatumS (term->add_args(), dbName);
+    sendQuery (query);
+    Response response (waitForResponse (query.token()));
+    if (response.type() == Response::SUCCESS_ATOM) return true;
+    if (response.type() == Response::RUNTIME_ERROR && getError (response) == (std::string ("Database `") + dbName + "` does not exist.")) return false;
+    if (isError (response)) GTHROW (std::string ("RethinkDB::dbDrop (") + dbName + "): " + getError (response));
+    GTHROW (response.DebugString()); return false;
   }
 
 };
