@@ -27,7 +27,8 @@ int main () {
   RethinkDB::setDatumS (RethinkDB::addOptArg (&johnDoe, "hero"), "John Doe");
   rdb.db ("glimTest") .table ("test") .insert (johnDoe);
   rdb.db ("glimTest") .table ("test") .get ("JohnDoe") .erase();
-  // TODO: rdb.dbDrop ("glimTest");
+  assert (rdb.dbDrop ("glimTest") == true);
+  assert (rdb.dbDrop ("glimTest") == false);
   cout << "pass." << endl;
   return 0;
 }
