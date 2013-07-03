@@ -109,9 +109,9 @@ public:
     return Response(); // Never happens.
   }
 
-  struct Table;
+  struct Table; struct Document;
 
-  /** Database. */
+  /** Reference to a database. */
   struct Db {
     RethinkDB* _rdb; const char* _db;
     Db (RethinkDB* rdb, const char* db): _rdb (rdb), _db (db) {}
@@ -151,7 +151,7 @@ public:
     }
   };
 
-  /** Table. */
+  /** Reference to a table. */
   struct Table {
     Db _db; const char* _table; bool _useOutdated;
     Table (Db db, const char* table, bool useOutdated): _db (db), _table (table), _useOutdated (useOutdated) {}
@@ -195,6 +195,51 @@ public:
       if (isError (response)) GTHROW ("RethinkDB::insert: " + getError (response));
       return response;
     }
+
+    /**
+     * <a href="http://www.rethinkdb.com/api/#js:selecting_data-get">Get a document by primary key</a>.
+     * Example: Find a document with the primary key 'superman'. \code
+     *   auto superman = r.db ("myDb") .table ("myTable") .get ("superman");
+     * \endcode
+     */
+    Document get (const char* pk);
+  };
+
+  /** Reference to a document. */
+  struct Document {
+    Table _table; const char* _pk;
+    Document (Table table, const char* pk): _table (table), _pk (pk) {}
+
+    /**
+     * <a href="http://www.rethinkdb.com/api/#js:writing_data-delete">Delete a document from a table</a>.
+     * The optional argument durability with value 'hard' or 'soft' will override the table's default durability setting.
+     *
+     * Delete returns an object that contains the following attributes:
+     * * deleted - the number of documents that were deleted;
+     * * skipped - the number of documents from the selection that were left unmodified because there was nothing to do. For example, if you delete a row that has already been deleted, that row will be skipped;
+     * * errors - the number of errors encountered while deleting;
+     *            if errors occured, first_error contains the text of the first error;
+     * * inserted, replaced, and unchanged - all 0 for a delete operation.
+     *
+     * Example: Delete superman from the database. \code
+     *   r.db ("myDb") .table ("myTable") .get ("superman") .erase();
+     * \endcode
+     */
+    Response erase (const char* durability = nullptr) {
+      Query query; query.set_type (Query::START); query.set_token (_table._db._rdb->nextToken());
+      Term* term = query.mutable_query(); term->set_type (Term::DELETE);
+      { Term* get = term->add_args(); get->set_type (Term::GET);
+        Term* table = get->add_args(); table->set_type (Term::TABLE);
+        Term* db = table->add_args(); db->set_type (Term::DB);
+        setDatumS (db->add_args(), _table._db._db);
+        setDatumS (table->add_args(), _table._table);
+        setDatumS (get->add_args(), _pk); }
+      if (durability) setDatumS (addOptArg (term, "durability"), durability);
+      _table._db._rdb->sendQuery (query);
+      Response response (_table._db._rdb->waitForResponse (query.token()));
+      if (isError (response)) GTHROW ("RethinkDB::erase: " + getError (response));
+      return response;
+    }
   };
 
   /** <a href="http://www.rethinkdb.com/api/#js:selecting_data-db">Reference a database</a>.
@@ -224,6 +269,10 @@ public:
 
 inline RethinkDB::Table RethinkDB::Db::table (const char* table, bool useOutdated) {
   return RethinkDB::Table (*this, table, useOutdated);
+}
+
+inline RethinkDB::Document RethinkDB::Table::get (const char* pk) {
+  return RethinkDB::Document (*this, pk);
 }
 
 }
