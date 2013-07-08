@@ -82,7 +82,21 @@ class CBCoro: public CBCoroStatic {
   /** Must call `cbcReturn` instead of `return`. */
   virtual void run() throw() = 0;
 
-  /** Captures the stack, runs the `fun` and relinquish the control to `_returnTo`.\n
+  /** Use this method to wrap a return-via-callback code.
+   * For example, the callback code \code
+   *   startSomeWork ([=]() {
+   *     continueWhenWorkIsFinished();
+   *   });
+   * \endcode should be turned into \code
+   *   yieldForCallback ([&]() {
+   *     startSomeWork ([&]() {
+   *       invokeFromCallback();
+   *     });
+   *   });
+   *   continueWhenWorkIsFinished();
+   * \endcode
+   *
+   * Captures the stack, runs the `fun` and relinquish the control to `_returnTo`.\n
    * This method will never "return" by itself, in order for it to "return" the
    * `fun` MUST call `invokeFromCallback`, maybe later and from a different stack. */
   template <typename F> void yieldForCallback (F fun) {
