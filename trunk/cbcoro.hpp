@@ -43,6 +43,7 @@ class CBCoro: public CBCoroStatic {
  protected:
   ucontext_t _context;
   ucontext_t* _returnTo;
+  std::recursive_mutex _mutex; ///< This one is locked most of the time.
   bool _invokeFromYield; ///< True if `invokeFromCallback` was called directly from `yieldForCallback`.
   bool _yieldFromInvoke; ///< True if `yieldForCallback` now runs from `invokeFromCallback`.
   char _stack[STACK_SIZE];
@@ -69,7 +70,9 @@ class CBCoro: public CBCoroStatic {
     // Since we have to "return" from inside the `yieldForCallback`,
     // we're not actually using the `_context.uc_link` and `return`, we use `setcontext (_returnTo)` instead.
     _returnTo = &back;
+    _mutex.lock();
     swapcontext (&back, &_context); // Now our stack lives and the caller stack is no longer in control.
+    _mutex.unlock();
   }
   static void cbcRun (CBCoro* cbCoro) {
     cbCoro->run();
@@ -120,16 +123,19 @@ class CBCoro: public CBCoroStatic {
  public:
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
   void invokeFromCallback() {
+    _mutex.lock(); // Wait for an other-thready `yieldForCallback` to finish.
     if (_returnTo != nullptr) {
       // We have not yet "returned" from the `yieldForCallback`,
       // meaning that the `invokeFromCallback` was executed immediately from inside the `yieldForCallback`.
       // In that case we must DO NOTHING, we must simply continue running on the current stack.
       _invokeFromYield = true; // Tells `yieldForCallback` to do nothing.
     } else {
-      // Revive the CBCoro, letting it to continue from where it was suspended in `yieldForCallback`.
+      // Revive the CBCoro, letting it continue from where it was suspended in `yieldForCallback`.
       ucontext_t cbContext; _returnTo = &cbContext; _yieldFromInvoke = true;
       if (swapcontext (&cbContext, &_context)) GTHROW ("!swapcontext");
+      // NB: When the CBCoro is suspended or exits, the control returns back there and then back to the callback from which we borrowed it.
       if (_returnTo == &cbContext) _returnTo = nullptr;
     }
+    _mutex.unlock(); // Other-thready `yieldForCallback` has finished and `cbcReturn`ed here.
   }
 };
