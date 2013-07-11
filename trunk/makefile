@@ -56,7 +56,7 @@ test_exception: bin/test_exception
 test_ldb: test_ldb.cc ldb.hpp
 	mkdir -p bin
 	g++ $(CXXFLAGS) -D_GLIM_EXCEPTION_CODE test_ldb.cc -o bin/test_ldb \
-	  -lleveldb -lboost_serialization-mt -lboost_filesystem-mt -lboost_system-mt
+	  -lleveldb -lboost_serialization -lboost_filesystem -lboost_system
 	valgrind -q bin/test_ldb
 
 bin/test_cbcoro: test_cbcoro.cc
@@ -71,7 +71,7 @@ ql2.pb.h: /root/work/rethinkdb-1.6.1/src/rdb_protocol/ql2.proto
 
 bin/test_rethinkdb: test_rethinkdb.cc rethinkdb.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_rethinkdb.cc -o bin/test_rethinkdb -lboost_system-mt -lprotobuf -pthread
+	g++ $(CXXFLAGS) test_rethinkdb.cc -o bin/test_rethinkdb -lboost_system -lprotobuf -pthread
 
 test_rethinkdb: bin/test_rethinkdb
 	valgrind -q bin/test_rethinkdb
