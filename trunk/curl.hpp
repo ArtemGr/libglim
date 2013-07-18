@@ -56,10 +56,14 @@ class Curl {
   char _errorBuf[CURL_ERROR_SIZE];
 
   /** @param cleanup can be turned off if the CURL is freed elsewhere. */
-  Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
+  Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {
+    curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
+    *_errorBuf = 0;}
   /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless).
    * @param cleanup can be turned off if the CURL is freed elsewhere. */
-  Curl (CURL* curl, bool cleanup = true): _curl (curl), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {*_errorBuf = 0;}
+  Curl (CURL* curl, bool cleanup = true): _curl (curl), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {
+    curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
+    *_errorBuf = 0;}
   ~Curl(){
     if (_headers) {curl_slist_free_all (_headers); _headers = NULL;}
     if (_curl) {if (_needs_cleanup) curl_easy_cleanup (_curl); _curl = NULL;}
@@ -92,11 +96,11 @@ class Curl {
    * NB: If `send` was used with a non-empty string then `http` will use `CURLOPT_UPLOAD`, setting http method to `PUT`.
    */
   Curl& http (const char* url, int timeoutSec = 20) {
+    curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_URL, url);
     curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToString);
     curl_easy_setopt (_curl, CURLOPT_WRITEDATA, &_got);
     curl_easy_setopt (_curl, CURLOPT_TIMEOUT, timeoutSec);
-    curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
     curl_easy_setopt (_curl, CURLOPT_ERRORBUFFER, _errorBuf);
     if (_sendStr.size() || _sendGStr.size()) {
@@ -120,10 +124,13 @@ class Curl {
    *   if (rc != 250) std::cerr << "Error sending email: " << rc << std::endl;
    * \endcode */
   Curl& smtp (const char* from, const char* to) {
+    curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_URL, "smtp://127.0.0.1");
     if (from) curl_easy_setopt (_curl, CURLOPT_MAIL_FROM, from);
-    if (to) _headers = curl_slist_append (_headers, to);
+    bcc (to);
     if (_headers) curl_easy_setopt (_curl, CURLOPT_MAIL_RCPT, _headers);
+    curl_easy_setopt (_curl, CURLOPT_WRITEFUNCTION, curlWriteToString);
+    curl_easy_setopt (_curl, CURLOPT_WRITEDATA, &_got);
     if (_sendStr.size()) {
       curl_easy_setopt (_curl, CURLOPT_INFILESIZE, (long) _sendStr.size());
       curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromString);
@@ -133,6 +140,13 @@ class Curl {
       curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromGString);
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);
     }
+    return *this;
+  }
+
+  /** Add SMTP recipient to the `_headers` (which are then set into `CURLOPT_MAIL_RCPT` by the `Curl::smtp`).
+   * NB: Should be used *before* the `Curl::smtp`! */
+  Curl& bcc (const char* to) {
+    if (to) _headers = curl_slist_append (_headers, to);
     return *this;
   }
 
