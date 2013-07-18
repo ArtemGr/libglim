@@ -143,6 +143,9 @@ void testStartsWith (Ldb& ldb) {
   count = 0; for (auto& en: boost::make_iterator_range (ldb.end().seek ("1"), ldb.end().seek ("2"))) {en.keyView(); ++count;} assert (count == 1);
   count = 0; for (auto& en: boost::make_iterator_range (ldb.end().seek ("2"), ldb.end().seek ("3"))) {en.keyView(); ++count;} assert (count == 3);
   count = 0; for (auto& en: ldb.range (C2GSTRING ("1"), C2GSTRING ("2"))) {en.keyView(); ++count;} assert (count == 1);
+
+  { auto range = ldb.range (C2GSTRING ("0"), C2GSTRING ("1"));  // 01 and 02, but not 11.
+    count = 0; for (auto& en: range) ++count; assert (count == 2); }
 }
 
 int main() {
