@@ -241,9 +241,9 @@ public:
   const char* endp() const {return (const char*)_buf + length();}
 
   gstring view (uint32_t pos, int32_t count = -1) {
-    return gstring (0, data() + pos, false, count >= 0 ? count : length() - pos);}
+    return gstring (0, data() + pos, false, count >= 0 ? count : length() - pos, copiedByReference());}
   const gstring view (uint32_t pos, int32_t count = -1) const {
-    return gstring (0, (void*)(data() + pos), false, count >= 0 ? count : length() - pos);}
+    return gstring (0, (void*)(data() + pos), false, count >= 0 ? count : length() - pos, copiedByReference());}
 
   // http://en.cppreference.com/w/cpp/concept/Iterator
   template<typename CT> struct iterator_t: public std::iterator<std::random_access_iterator_tag, CT, int32_t> {
