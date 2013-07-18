@@ -46,6 +46,7 @@ class CBCoro {
     //       cf. http://man7.org/linux/man-pages/man2/mprotect.2.html
     //       cf. http://man7.org/linux/man-pages/man3/posix_memalign.3.html
     //       Even a simple malloc will make the over/underflows detectable by valgrind & co.
+    //       Growing stack: http://stackoverflow.com/questions/5618641/coroutines-with-a-growing-stack-in-c
     _context.uc_stack.ss_sp = _stack;
     _context.uc_stack.ss_size = STACK_SIZE;
     #pragma GCC diagnostic ignored "-Wunused-value"
@@ -88,7 +89,7 @@ class CBCoro {
   }
   /** This method is performed on the CBCoro stack, allowing it to be suspended and then reanimated from callbacks. */
   virtual void run() = 0;
-
+ public:
   /** Use this method to wrap a return-via-callback code.
    * For example, the callback code \code
    *   startSomeWork ([=]() {
@@ -126,7 +127,7 @@ class CBCoro {
     }
     return ptr;
   }
- public:
+
   /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
   CBCoroPtr invokeFromCallback() {
     CBCoroPtr ptr (this);
