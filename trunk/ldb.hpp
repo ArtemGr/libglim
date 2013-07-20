@@ -321,13 +321,13 @@ struct Ldb {
     ldbSerialize (kbytes, key);
     leveldb::Slice keySlice (kbytes.data(), kbytes.size());
 
-    // Using an iterator to avoid the std::string copy of value in `Get` (I don't know if it is actually faster).
-    std::unique_ptr<leveldb::Iterator> it (_db->NewIterator (options));
-    it->Seek (keySlice); if (it->Valid()) {
-      auto&& itKey = it->key();
-      return itKey.size() == keySlice.size() && memcmp (itKey.data(), keySlice.data(), itKey.size()) == 0;
-    }
-    return false;
+    // NB: "BloomFilter only helps for Get() calls" - https://groups.google.com/d/msg/leveldb/oEiDztqHiHc/LMY3tHxzRGAJ
+    //     "Apart from the lack of Bloom filter functionality, creating an iterator is really quite slow" - qpu2jSA8mCEJ
+    std::string str;
+    leveldb::Status status (_db->Get (options, keySlice, &str));
+    if (status.ok()) return true;
+    else if (status.IsNotFound()) return false;
+    else GTHROW ("Ldb.have: " + status.ToString());
   }
 
   /** Returns `true` and modifies `value` if `key` is found. */
