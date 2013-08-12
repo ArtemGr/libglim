@@ -124,7 +124,10 @@ struct Ldb {
     template <typename T> T getValue() const {T value; getValue (value); return value;}
   };
   struct NoSeekFlag {}; ///< Tells the `Iterator` constructor not to seek to the beginning of the database.
-  /** Wraps Leveldb iterator. */
+  /** Wraps Leveldb iterator.
+   * Note: "In fact the iterator is a light-weight snapshot. It will see exactly the version of the DB that existed when the iterator was created
+   * (i.e., any insert/delete done after the iterator is created, regardless of which thread does them) will be invisible to the iterator"
+   * (https://groups.google.com/d/msg/leveldb/nX8S5KKiSn4/PI92Yf1Hf6UJ). */
   struct Iterator: public boost::iterator_facade<Iterator, IteratorEntry, boost::bidirectional_traversal_tag> {
     std::shared_ptr<IteratorEntry> _entry; ///< The Iterator might be copied around, therefore we keep the real iterator and the state in the shared_ptr.
 
