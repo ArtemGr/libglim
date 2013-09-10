@@ -28,7 +28,7 @@ void esDelete (int frople, std::function<void(int)> cb) {
   }); th.detach();
 }
 
-struct RemoveFroples: public glim::CBCoro<4096> {
+struct RemoveFroples: public glim::CBCoro {
   const char* _argument;
   RemoveFroples (const char* argument): _argument (argument) {
     printf ("RF: constructor\n");
