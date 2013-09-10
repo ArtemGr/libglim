@@ -127,8 +127,8 @@ public:
    * Performs "delta" serialization of the pool: creates a new pool where values which has not changed are copied from the `oldPool`.\n
    * \code Use case: 1) pools X and Y are loaded from a database by users A and B;
    *           2) user A changes field 0 in pool X; 3) user B changes field 1 in pool Y;
-   *           4) user A loads `oldPool` from the database, does `serialize` from pool X and saves to the database;
-   *           5) user B loads `oldPool` from the database, does `serialize` from pool Y and saves to the database;
+   *           4) user A loads `oldPool` from the database, does `toBytesDelta` from pool X and saves to the database;
+   *           5) user B loads `oldPool` from the database, does `toBytesDelta` from pool Y and saves to the database;
    *           result: database contains both changes (field 0 from user A and field 1 from user B). \endcode
    * @param changeVisitor is called for every field that was changed between the oldPool and the current one.
    * Returns `false` and leaves `newPool` *empty* if there are no changes found against the `oldPool`.
