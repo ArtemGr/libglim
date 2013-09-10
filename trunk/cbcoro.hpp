@@ -6,6 +6,8 @@
 //     https://svn.boost.org/trac/boost/changeset/84311
 
 #include <ucontext.h>
+#include <sys/mman.h>  // mmap
+#include <string.h>  // strerror
 #include <mutex>
 #include <iostream>
 #include <atomic>
@@ -15,7 +17,6 @@
 namespace glim {
 
 /** Simplifies turning callback control flows into normal imperative control flows. */
-template <int STACK_SIZE>
 class CBCoro {
  public:
   /** "Holds" the CBCoro and will delete it when it is no longer used. */
@@ -37,23 +38,29 @@ class CBCoro {
   bool _delete;  ///< Whether the `CBCoroPtr` should `delete` this instance when it is no longer used (default is `true`).
   bool _invokeFromYield;  ///< True if `CBCoro::invokeFromCallback` was called directly from `CBCoro::yieldForCallback`.
   bool _yieldFromInvoke;  ///< True if `CBCoro::yieldForCallback` now runs from `CBCoro::invokeFromCallback`.
-  char _stack[STACK_SIZE];
-  CBCoro(): _returnTo (nullptr), _users (0), _delete (true), _invokeFromYield (false), _yieldFromInvoke (false) {
+  void* _stack;
+  size_t const _stackSize;
+
+  virtual void allocateStack() {
+    _stack = mmap (nullptr, _stackSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_NORESERVE, -1, 0);
+    if (_stack == MAP_FAILED) GTHROW (std::string ("mmap allocation failed: ") + ::strerror (errno));
+  }
+  virtual void freeStack() {
+    if (munmap (_stack, _stackSize)) GTHROW (std::string ("!munmap: ") + ::strerror (errno));;
+  }
+
+  CBCoro (size_t stackSize = 512 * 1024): _returnTo (nullptr), _users (0), _delete (true), _invokeFromYield (false), _yieldFromInvoke (false),
+      _stack (nullptr), _stackSize (stackSize) {
     if (getcontext (&_context)) GTHROW ("!getcontext");
-    // TODO: Allocate and free the stack in separate virtual methods, in order to make the allocation extendable.
-    // TODO: Allocate the stack with mmap or memalign, making the first and last pages PROT_NONE with mprotect,
-    //       in order to simplify stack overflow and underflow detection.
-    //       cf. http://man7.org/linux/man-pages/man2/mprotect.2.html
-    //       cf. http://man7.org/linux/man-pages/man3/posix_memalign.3.html
-    //       Even a simple malloc will make the over/underflows detectable by valgrind & co.
-    //       Growing stack: http://stackoverflow.com/questions/5618641/coroutines-with-a-growing-stack-in-c
+    allocateStack();
     _context.uc_stack.ss_sp = _stack;
-    _context.uc_stack.ss_size = STACK_SIZE;
+    _context.uc_stack.ss_size = stackSize;
     #pragma GCC diagnostic ignored "-Wunused-value"
-    VALGRIND_STACK_REGISTER (_stack, _stack + STACK_SIZE);
+    VALGRIND_STACK_REGISTER (_stack, (char*) _stack + stackSize);
   }
   virtual ~CBCoro() {
     VALGRIND_STACK_DEREGISTER (_stack);
+    freeStack();
   }
  public:
   /** Starts the coroutine on the `_stack` (makecontext, swapcontext), calling the `CBCoro::run`. */
