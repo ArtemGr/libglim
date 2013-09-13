@@ -18,11 +18,13 @@ using std::function;
 using std::shared_ptr; using std::make_shared;
 #include <string>
 using std::string; using std::to_string;
+#include <iostream>
+using std::cout; using std::endl;
 
 /** A typical remote service with callback. */
 void esDelete (int frople, std::function<void(int)> cb) {
   std::thread th ([cb,frople]() {
-    printf ("esDelete: sleeping for a second\n");
+    cout << "esDelete: sleeping for a second" << endl;
     std::this_thread::sleep_for (std::chrono::seconds (1));
     cb (frople);
   }); th.detach();
@@ -31,18 +33,18 @@ void esDelete (int frople, std::function<void(int)> cb) {
 struct RemoveFroples: public glim::CBCoro {
   const char* _argument;
   RemoveFroples (const char* argument): _argument (argument) {
-    printf ("RF: constructor\n");
+    cout << "RF: constructor" << endl;
   }
   virtual ~RemoveFroples() {puts ("~RemoveFroples");}
   virtual void run() override {
     for (int i = 1; i <= 4; ++i) {
-      printf ("RF: Removing frople %i...\n", i);
+      cout << "RF: Removing frople " << i << "..." << endl;
       int returnedFrople = 0;
       yieldForCallback ([this,i,&returnedFrople]() {
         if (i != 2) {
           // Sometimes we use a callback.
           esDelete (i, [this,&returnedFrople](int frople) {
-            printf ("RF,CB: frople %i.\n", frople);
+            cout << "RF,CB: frople " << frople << "." << endl;
             returnedFrople = frople;
             invokeFromCallback();
           });
@@ -52,15 +54,26 @@ struct RemoveFroples: public glim::CBCoro {
           invokeFromCallback();
         }
       });
-      printf ("RF: Returned from callback; _returnTo is: %li; frople %i\n", (intptr_t) _returnTo, returnedFrople);
+      cout << "RF: Returned from callback; _returnTo is: " << (intptr_t) _returnTo << "; frople " << returnedFrople << endl;
     }
-    printf ("RF: finish! _returnTo is: %li\n", (intptr_t) _returnTo);
+    cout << "RF: finish! _returnTo is: " << (intptr_t) _returnTo << endl;
   };
 };
 
 int main() {
+  glim::cbCoro ([](glim::CBCoro* cbcoro) {
+    cout << "main: run1, thread " << std::this_thread::get_id() << endl;  // Runs on the `main` thread.
+    cbcoro->yieldForCallback ([&]() {
+      std::thread callbackThread ([&]() {
+        std::this_thread::sleep_for (std::chrono::seconds (4));
+        cbcoro->invokeFromCallback();
+      }); callbackThread.detach();
+    });
+    cout << "main: run2, thread " << std::this_thread::get_id() << endl;  // Runs on the `callbackThread`.
+  });
+
   (new RemoveFroples ("argument"))->start();
-  printf ("main: returned from RemoveFroples\n");
+  cout << "main: returned from RemoveFroples" << endl;
   sleep (5);
   return 0;
 }
