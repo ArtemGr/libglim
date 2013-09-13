@@ -1,3 +1,6 @@
+/** \file
+ * ucontext-based coroutine library designed to emulate a normal control flow around callbacks. */
+
 // http://en.wikipedia.org/wiki/Setcontext; man 3 makecontext; man 2 getcontext
 // http://www.boost.org/doc/libs/1_53_0/libs/context/doc/html/index.html
 // g++ -std=c++11 -O1 -Wall -g test_cbcoro.cc -pthread && ./a.out
@@ -155,5 +158,21 @@ class CBCoro {
     return ptr;
   }
 };
+
+/** CBCoro running a given functor.
+ * The functor's first argument must be a CBCoro pointer, like this: \code (new CBCoroForFunctor ([](CBCoro* cbcoro) {}))->start(); \endcode */
+template <typename Fun> struct CBCoroForFunctor: public CBCoro {
+  Fun _fun;
+  template <typename CFun> CBCoroForFunctor (CFun&& fun, size_t stackSize): CBCoro (stackSize), _fun (std::forward<CFun> (fun)) {}
+  virtual void run() {_fun (this);}
+  virtual ~CBCoroForFunctor() {}
+};
+
+/** Syntactic sugar: Runs a given functor in a CBCoro instance.
+ * Example: \code glim::cbCoro ([](glim::CBCoro* cbcoro) {}); \endcode
+ * Returns a `CBCoroPtr` to the CBCoro instance holding the `fun` which might be held somewhere in order to delay the deletion of `fun`. */
+template <typename Fun> inline CBCoro::CBCoroPtr cbCoro (Fun&& fun, size_t stackSize = 512 * 1024) {
+  return (new CBCoroForFunctor<Fun> (std::forward<Fun> (fun), stackSize))->start();
+}
 
 }
