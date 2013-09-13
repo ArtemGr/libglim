@@ -4,6 +4,7 @@
 
 #define _GLIM_EXCEPTION_CODE
 #include <glim/exception.hpp>
+#include <glim/NsecTimer.hpp>
 
 #include "cbcoro.hpp"
 #include <stdio.h>
@@ -74,6 +75,16 @@ int main() {
 
   (new RemoveFroples ("argument"))->start();
   cout << "main: returned from RemoveFroples" << endl;
+
+  glim::NsecTimer timer; const int ops = RUNNING_ON_VALGRIND ? 999 : 9999;
+  for (int i = 0; i < ops; ++i) glim::cbCoro ([](glim::CBCoro* cbcoro) {});
+  double speedEmpty = ops / timer.sec();
+  timer.restart();
+  for (int i = 0; i < ops; ++i) glim::cbCoro ([](glim::CBCoro* cbcoro) {cbcoro->yieldForCallback ([&]() {cbcoro->invokeFromCallback();});});
+  double speedImmediate = ops / timer.sec();
+
   sleep (5);
+  cout << "speed: empty: " << speedEmpty << " o/s" << endl;
+  cout << "speed: immediate: " << speedImmediate << " o/s" << endl;
   return 0;
 }
