@@ -12,9 +12,7 @@
 #include <sys/mman.h>  // mmap
 #include <string.h>  // strerror
 #include <mutex>
-#include <iostream>
 #include <atomic>
-#include <vector>
 #include <valgrind/valgrind.h>
 #include <glim/exception.hpp>
 #include <boost/container/flat_map.hpp>
