@@ -19,36 +19,36 @@
 #include <errno.h>
 
 #include "exception.hpp"
+#include "gstring.hpp"
 
 namespace glim {
 
-/** HTTP results */
+/// HTTP results
 struct hgot {
   int32_t status = 0;
-  /** Uses errno codes. */
+  /// Uses errno codes.
   int32_t error = 0;
   struct evbuffer* body = 0;
   struct evhttp_request* req = 0;
   size_t bodyLength() const {return body ? evbuffer_get_length (body) : 0;}
-  /** Warning: the string is NOT zero-terminated. */
+  /// Warning: the string is NOT zero-terminated.
   const char* bodyData() {return body ? (const char*) evbuffer_pullup (body, -1) : "";}
-  /** Returns a zero-terminated string. Warning: modifies the `body` every time in order to add the terminator. */
+  /// Returns a zero-terminated string. Warning: modifies the `body` every time in order to add the terminator.
   const char* cbody() {if (!body) return ""; evbuffer_add (body, "", 1); return (const char*) evbuffer_pullup (body, -1);}
-#ifdef _GSTRING_INCLUDED
+  /// A gstring *view* into the `body`.
   glim::gstring gbody() {
     if (!body) return glim::gstring();
     return glim::gstring (0, evbuffer_pullup (body, -1), false, evbuffer_get_length (body));}
-#endif
 };
 
-/** Used internally to pass both connection and handler into callback. */
+/// Used internally to pass both connection and handler into callback.
 struct hgetContext {
   struct evhttp_connection* conn;
   std::function<void(hgot&)> handler;
   hgetContext (struct evhttp_connection* conn, std::function<void(hgot&)> handler): conn (conn), handler (handler) {}
 };
 
-/** Invoked when evhttp finishes a request. */
+/// Invoked when evhttp finishes a request.
 inline void hgetCB (struct evhttp_request* req, void* ctx_){
   hgetContext* ctx = (hgetContext*) ctx_;
 
@@ -92,30 +92,26 @@ class hget {
   enum evhttp_cmd_type _method;
  public:
   typedef std::shared_ptr<struct evhttp_uri> uri_t;
-  /** The third parameter is the request number, starting from 1. */
+  /// The third parameter is the request number, starting from 1.
   typedef std::function<float(hgot&,uri_t,int32_t)> until_handler_t;
  public:
   hget (std::shared_ptr<struct event_base> evbase, std::shared_ptr<struct evdns_base> dnsbase):
     _evbase (evbase), _dnsbase (dnsbase), _method (EVHTTP_REQ_GET) {}
 
-  /** Modifies the request before its execution. */
+  /// Modifies the request before its execution.
   hget& setRequestBuilder (std::function<void(struct evhttp_request*)> rb) {
     _requestBuilder = rb;
     return *this;
   }
 
-  /** Uses a simple request builder to send the `str`.\n
+  /** Uses a simple request builder to send the `str`.
    * `str` is a `char` string class with methods `data` and `size`. */
   template<typename STR> hget& payload (STR str, const char* contentType = nullptr, enum evhttp_cmd_type method = EVHTTP_REQ_POST) {
     _method = method;
     return setRequestBuilder ([str,contentType](struct evhttp_request* req) {
       if (contentType) evhttp_add_header (req->output_headers, "Content-Type", contentType);
       char buf[64];
-#ifdef _GSTRING_INCLUDED
       *glim::itoa (buf, (int) str.size()) = 0;
-#else
-      snprintf (buf, 63, "%i", (int) str.size());
-#endif
       evhttp_add_header (req->output_headers, "Content-Length", buf);
       evbuffer_add (req->output_buffer, (const void*) str.data(), (size_t) str.size());
     });
@@ -154,17 +150,17 @@ class hget {
 
   void goUntil (std::vector<uri_t> urls, until_handler_t handler, int32_t timeoutSec = 20);
   /**
-   * Parse urls and call `goUntil`.\n
-   * Example (trying ten times to reach the servers): \code
-   *   std::string path ("/path");
-   *   hget.goUntilS (boost::assign::list_of ("http://server1" + path) ("http://server2" + path),
-   *    [](hgot& got, hget::uri_t uri, int32_t num)->float {
-   *     std::cout << "server: " << evhttp_uri_get_host (uri.get()) << "; request number: " << num << std::endl;
-   *     if (got.status != 200 && num < 10) return 1.f; // Retry in a second.
-   *     return -1.f; // No need to retry the request.
-   *   });
-   * \endcode
-   * @param urls is a for-compatible container of strings (where string has methods `data` and `size`).
+     Parse urls and call `goUntil`.
+     Example (trying ten times to reach the servers): \code
+       std::string path ("/path");
+       hget.goUntilS (boost::assign::list_of ("http://server1" + path) ("http://server2" + path),
+        [](hgot& got, hget::uri_t uri, int32_t num)->float {
+         std::cout << "server: " << evhttp_uri_get_host (uri.get()) << "; request number: " << num << std::endl;
+         if (got.status != 200 && num < 10) return 1.f; // Retry in a second.
+         return -1.f; // No need to retry the request.
+       });
+     \endcode
+     @param urls is a for-compatible container of strings (where string has methods `data` and `size`).
    */
   template<typename URLS> void goUntilS (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
     std::vector<uri_t> parsedUrls;
@@ -178,21 +174,21 @@ class hget {
     goUntil (parsedUrls, handler, timeoutSec);
   }
   /**
-   * Parse urls and call `goUntil`.\n
-   * Example (trying ten times to reach the servers): \code
-   *   hget.goUntilC (boost::assign::list_of ("http://server1/") ("http://server2/"),
-   *    [](hgot& got, hget::uri_t uri, int32_t num)->float {
-   *     std::cout << "server: " << evhttp_uri_get_host (uri.get()) << "; request number: " << num << std::endl;
-   *     if (got.status != 200 && num < 10) return 1.f; // Retry in a second.
-   *     return -1.f; // No need to retry the request.
-   *   });
-   * \endcode
-   * Or with `std::array` instead of `boost::assign::list_of`: \code
-   *   std::array<const char*, 2> urls {{"http://server1/", "http://server2/"}};
-   *   hget.goUntilC (urls, [](hgot& got, hget::uri_t uri, int32_t num)->float {
-   *     return got.status != 200 && num < 10 ? 0.f : -1.f;});
-   * \endcode
-   * @param urls is a for-compatible container of C strings (const char*).
+     Parse urls and call `goUntil`.
+     Example (trying ten times to reach the servers): \code
+       hget.goUntilC (boost::assign::list_of ("http://server1/") ("http://server2/"),
+        [](hgot& got, hget::uri_t uri, int32_t num)->float {
+         std::cout << "server: " << evhttp_uri_get_host (uri.get()) << "; request number: " << num << std::endl;
+         if (got.status != 200 && num < 10) return 1.f; // Retry in a second.
+         return -1.f; // No need to retry the request.
+       });
+     \endcode
+     Or with `std::array` instead of `boost::assign::list_of`: \code
+       std::array<const char*, 2> urls {{"http://server1/", "http://server2/"}};
+       hget.goUntilC (urls, [](hgot& got, hget::uri_t uri, int32_t num)->float {
+         return got.status != 200 && num < 10 ? 0.f : -1.f;});
+     \endcode
+     @param urls is a for-compatible container of C strings (const char*).
    */
   template<typename URLS> void goUntilC (URLS&& urls, until_handler_t handler, int32_t timeoutSec = 20) {
     std::vector<uri_t> parsedUrls;
@@ -207,7 +203,8 @@ class hget {
 
 inline void hgetUntilRetryCB (evutil_socket_t, short, void* utilHandlerPtr); // event_callback_fn
 
-/** `hget::goUntil` implementation. This function object is passed to `hget::go` as a handler and calls `hget::go` again if necessary. */
+/** `hget::goUntil` implementation.
+ * This function object is passed to `hget::go` as a handler and calls `hget::go` again if necessary. */
 struct HgetUntilHandler {
   hget _hget;
   hget::until_handler_t _handler;
@@ -239,14 +236,14 @@ struct HgetUntilHandler {
   }
 };
 
-/** Used in `hget::goUntil` to wait in `evtimer_new` before repeating the request. */
+/// Used in `hget::goUntil` to wait in `evtimer_new` before repeating the request.
 inline void hgetUntilRetryCB (evutil_socket_t, short, void* utilHandlerPtr) { // event_callback_fn
   std::unique_ptr<HgetUntilHandler> untilHandler ((HgetUntilHandler*) utilHandlerPtr);
   untilHandler->retry();
 }
 
 /**
- * Allows to retry the request using multiple URLs in a round-robin fashion.\n
+ * Allows to retry the request using multiple URLs in a round-robin fashion.
  * The `handler` returns the number of seconds to wait before retrying the request or -1 if no retry is necessary.
  */
 inline void hget::goUntil (std::vector<uri_t> urls, until_handler_t handler, int32_t timeoutSec) {
