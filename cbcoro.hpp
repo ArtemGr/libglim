@@ -14,8 +14,11 @@
 #include <mutex>
 #include <iostream>
 #include <atomic>
+#include <vector>
 #include <valgrind/valgrind.h>
 #include <glim/exception.hpp>
+#include <boost/container/flat_map.hpp>
+#include <boost/container/slist.hpp>
 
 namespace glim {
 
@@ -33,38 +36,60 @@ class CBCoro {
     }
     CBCoro* operator ->() const {return _coro;}
   };
+
+  static constexpr size_t defaultStackSize() {return 512 * 1024;}
+  static constexpr uint8_t defaultCacheSize() {return 2;}
  protected:
+  typedef boost::container::flat_map<size_t, boost::container::slist<void*> > cache_t;
+  /// The cached stacks; stackSize -> free list.
+  static cache_t& cache() {static cache_t CACHE; return CACHE;}
+  static std::mutex& cacheMutex() {static std::mutex CACHE_MUTEX; return CACHE_MUTEX;}
+
   ucontext_t _context;
   ucontext_t* _returnTo;
   std::recursive_mutex _mutex;  ///< This one is locked most of the time.
   std::atomic_int_fast32_t _users;  ///< Counter used by `CBCoroPtr`.
   bool _delete;  ///< Whether the `CBCoroPtr` should `delete` this instance when it is no longer used (default is `true`).
-  bool _invokeFromYield;  ///< True if `CBCoro::invokeFromCallback` was called directly from `CBCoro::yieldForCallback`.
-  bool _yieldFromInvoke;  ///< True if `CBCoro::yieldForCallback` now runs from `CBCoro::invokeFromCallback`.
+  bool _invokeFromYield;  ///< True if `invokeFromCallback()` was called directly from `yieldForCallback()`.
+  bool _yieldFromInvoke;  ///< True if `yieldForCallback()` now runs from `invokeFromCallback()`.
+  uint8_t const _cacheStack;  ///< Tells `freeStack()` to cache the stack if the number of cached `#_stackSize` stacks is less than it.
   void* _stack;
-  size_t const _stackSize;
+  size_t const _stackSize;  ///< Keeps the size of the stack.
 
-  /// Peek a stack from the cache or allocate one with `mmap`.
+  /// Peek a stack from the cache or allocate one with `mmap` (and register with Valgrind).
   virtual void allocateStack() {
+    if (_cacheStack) {
+      std::lock_guard<std::mutex> lock (cacheMutex());
+      auto& freeList = cache()[_stackSize];
+      if (!freeList.empty()) {_stack = freeList.front(); freeList.pop_front(); return;}
+    }
     _stack = mmap (nullptr, _stackSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_NORESERVE, -1, 0);
     if (_stack == MAP_FAILED) GTHROW (std::string ("mmap allocation failed: ") + ::strerror (errno));
+    #pragma GCC diagnostic ignored "-Wunused-value"
+    VALGRIND_STACK_REGISTER (_stack, (char*) _stack + _stackSize);
   }
-  /// Release a stack into the cache or free it with `munmap`.
+  /// Release a stack into the cache or free it with `munmap` (and deregister with Valgrind).
   virtual void freeStack() {
+    if (_cacheStack) {
+      std::lock_guard<std::mutex> lock (cacheMutex());
+      auto& freeList = cache()[_stackSize];
+      if (freeList.size() < _cacheStack) {freeList.push_front (_stack); _stack = nullptr; return;}
+    }
+    VALGRIND_STACK_DEREGISTER (_stack);
     if (munmap (_stack, _stackSize)) GTHROW (std::string ("!munmap: ") + ::strerror (errno));;
+    _stack = nullptr;
   }
 
-  CBCoro (size_t stackSize = 512 * 1024): _returnTo (nullptr), _users (0), _delete (true), _invokeFromYield (false), _yieldFromInvoke (false),
-      _stack (nullptr), _stackSize (stackSize) {
+  /// Prepare the coroutine (initialize context, allocate stack and register it with Valgrind).
+  CBCoro (uint8_t cacheStack = defaultCacheSize(), size_t stackSize = defaultStackSize()):
+      _returnTo (nullptr), _users (0), _delete (true), _invokeFromYield (false), _yieldFromInvoke (false),
+      _cacheStack (cacheStack), _stack (nullptr), _stackSize (stackSize) {
     if (getcontext (&_context)) GTHROW ("!getcontext");
     allocateStack();
     _context.uc_stack.ss_sp = _stack;
     _context.uc_stack.ss_size = stackSize;
-    #pragma GCC diagnostic ignored "-Wunused-value"
-    VALGRIND_STACK_REGISTER (_stack, (char*) _stack + stackSize);
   }
   virtual ~CBCoro() {
-    VALGRIND_STACK_DEREGISTER (_stack);
     freeStack();
   }
  public:
@@ -163,9 +188,9 @@ class CBCoro {
 
 /** CBCoro running a given functor.
  * The functor's first argument must be a CBCoro pointer, like this: \code (new CBCoroForFunctor ([](CBCoro* cbcoro) {}))->start(); \endcode */
-template <typename Fun> struct CBCoroForFunctor: public CBCoro {
-  Fun _fun;
-  template <typename CFun> CBCoroForFunctor (CFun&& fun, size_t stackSize): CBCoro (stackSize), _fun (std::forward<CFun> (fun)) {}
+template <typename FUN> struct CBCoroForFunctor: public CBCoro {
+  FUN _fun;
+  template <typename CFUN> CBCoroForFunctor (CFUN&& fun, uint8_t cacheStack, size_t stackSize): CBCoro (cacheStack, stackSize), _fun (std::forward<CFUN> (fun)) {}
   virtual void run() {_fun (this);}
   virtual ~CBCoroForFunctor() {}
 };
@@ -173,8 +198,8 @@ template <typename Fun> struct CBCoroForFunctor: public CBCoro {
 /** Syntactic sugar: Runs a given functor in a CBCoro instance.
  * Example: \code glim::cbCoro ([](glim::CBCoro* cbcoro) {}); \endcode
  * Returns a `CBCoroPtr` to the CBCoro instance holding the `fun` which might be held somewhere in order to delay the deletion of `fun`. */
-template <typename Fun> inline CBCoro::CBCoroPtr cbCoro (Fun&& fun, size_t stackSize = 512 * 1024) {
-  return (new CBCoroForFunctor<Fun> (std::forward<Fun> (fun), stackSize))->start();
+template <typename FUN> inline CBCoro::CBCoroPtr cbCoro (FUN&& fun, uint8_t cacheStack = CBCoro::defaultCacheSize(), size_t stackSize = CBCoro::defaultStackSize()) {
+  return (new CBCoroForFunctor<FUN> (std::forward<FUN> (fun), cacheStack, stackSize))->start();
 }
 
 }
