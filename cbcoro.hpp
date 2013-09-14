@@ -19,10 +19,10 @@
 
 namespace glim {
 
-/** Simplifies turning callback control flows into normal imperative control flows. */
+/// Simplifies turning callback control flows into normal imperative control flows.
 class CBCoro {
  public:
-  /** "Holds" the CBCoro and will delete it when it is no longer used. */
+  /// "Holds" the CBCoro and will delete it when it is no longer used.
   struct CBCoroPtr {
     CBCoro* _coro;
     CBCoroPtr (CBCoro* coro): _coro (coro) {
@@ -44,10 +44,12 @@ class CBCoro {
   void* _stack;
   size_t const _stackSize;
 
+  /// Peek a stack from the cache or allocate one with `mmap`.
   virtual void allocateStack() {
     _stack = mmap (nullptr, _stackSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_NORESERVE, -1, 0);
     if (_stack == MAP_FAILED) GTHROW (std::string ("mmap allocation failed: ") + ::strerror (errno));
   }
+  /// Release a stack into the cache or free it with `munmap`.
   virtual void freeStack() {
     if (munmap (_stack, _stackSize)) GTHROW (std::string ("!munmap: ") + ::strerror (errno));;
   }
@@ -66,7 +68,7 @@ class CBCoro {
     freeStack();
   }
  public:
-  /** Starts the coroutine on the `_stack` (makecontext, swapcontext), calling the `CBCoro::run`. */
+  /// Starts the coroutine on the `_stack` (makecontext, swapcontext), calling the `CBCoro::run`.
   CBCoroPtr start() {
     CBCoroPtr ptr (this);
     ucontext_t back; _context.uc_link = &back;
@@ -80,7 +82,7 @@ class CBCoro {
     return ptr;
   }
  protected:
-  /** Logs exception thrown from `CBCoro::run`. */
+  /// Logs exception thrown from `CBCoro::run`.
   virtual void log (const std::exception& ex) {
     std::cerr << "glim::CBCoro, exception: " << ex.what() << std::endl;
   }
@@ -92,12 +94,12 @@ class CBCoro {
     }
     cbCoro->cbcReturn();  // Return the control to the rightful owner, e.g. to a last callback who ran `invokeFromCallback`, or otherwise to `cbcStart`.
   }
-  /** Relinquish the control to the original owner of the thread, restoring its stack. */
+  /// Relinquish the control to the original owner of the thread, restoring its stack.
   void cbcReturn() {
     ucontext_t* returnTo = _returnTo;
     if (returnTo != nullptr) {_returnTo = nullptr; setcontext (returnTo);}
   }
-  /** This method is performed on the CBCoro stack, allowing it to be suspended and then reanimated from callbacks. */
+  /// This method is performed on the CBCoro stack, allowing it to be suspended and then reanimated from callbacks.
   virtual void run() = 0;
  public:
   /** Use this method to wrap a return-via-callback code.
@@ -138,7 +140,7 @@ class CBCoro {
     return ptr;
   }
 
-  /** To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`. */
+  /// To be called from a callback in order to lend the control to CBCoro, continuing it from where it called `yieldForCallback`.
   CBCoroPtr invokeFromCallback() {
     CBCoroPtr ptr (this);
     _mutex.lock();  // Wait for an other-thready `yieldForCallback` to finish.
