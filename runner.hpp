@@ -20,10 +20,10 @@
 
 namespace glim {
 
-/** Run CURLM requests and completion handlers, as well as other periodic jobs. */
+/// Run CURLM requests and completion handlers, as well as other periodic jobs.
 class Runner {
   G_DEFINE_EXCEPTION (RunnerEx);
-  /** Free CURL during stack unwinding. */
+  /// Free CURL during stack unwinding.
   struct FreeCurl {
     Runner* runner; CURL* curl;
     FreeCurl (Runner* runner, CURL* curl): runner (runner), curl (curl) {}
@@ -35,7 +35,7 @@ class Runner {
   };
  public:
   struct JobInfo;
-  /** The job must return `true` if Runner is to continue invoking it. */
+  /// The job must return `true` if Runner is to continue invoking it.
   typedef std::function<bool(JobInfo& jobInfo)> job_t;
   struct JobInfo {
     job_t job;
@@ -50,7 +50,7 @@ protected:
   std::recursive_mutex _mutex;
   typedef std::unique_ptr<struct event, void(*)(struct event*)> event_t;
   std::unordered_map<CURL*, std::pair<handler_t, event_t>> _handlers;
-  /** Functions to run periodically. */
+  /// Functions to run periodically.
   typedef std::unordered_map<gstring, JobInfo> jobs_map_t;
   jobs_map_t _jobs;
   CURLM* _curlm = nullptr;
@@ -66,11 +66,11 @@ protected:
     return false;
   }
 
-  /** Used for debugging. */
+  /// Used for debugging.
   static uint64_t ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::system_clock::now().time_since_epoch()) .count();
   }
-  /** Tells CURL to check its sockets. */
+  /// Tells CURL to check its sockets.
   void callCurlWithTimeout() {
     //std::cout << __LINE__ << ',' << ms() << ": callCurlWithTimeout" << std::endl;
     int running_handles = 0;
@@ -78,7 +78,7 @@ protected:
     if (rc != CURLM_OK) {GSTRING_ON_STACK (err, 256) << "glim::Runner: curl_multi_socket_action: " << curl_multi_strerror (rc); _errlog (err.c_str());}
   }
 
-  /** Should only be run when the _mutex is locked. */
+  /// Should only be run when the _mutex is locked.
   void checkForFinishedCurlJobs() {
     //std::cout << __LINE__ << ',' << ms() << ": checkForFinishedCurlJobs" << std::endl;
     nextMessage:
@@ -96,7 +96,7 @@ protected:
         _errlog (err.c_str());
       }
   }
-  /** Will reset the timer unless there is a shorter timer already set. */
+  /// Will reset the timer unless there is a shorter timer already set.
   void restartTimer (uint32_t nextInMicro = 100000) {  // 100ms = 100000µs
     struct timeval tv;
     if (event_pending (_timer, EV_TIMEOUT, &tv) && !tv.tv_sec && tv.tv_usec < nextInMicro) return; // Already have a shorter timeout.
@@ -109,7 +109,7 @@ protected:
     runner->callCurlWithTimeout();
     runner->run();
   }
-  /** event_callback_fn: There is an activity on a socket we are monitoring for CURL. */
+  /// event_callback_fn: There is an activity on a socket we are monitoring for CURL.
   static void evSocketCB (evutil_socket_t sock, short events, void* runner_) {
     //std::cout << __LINE__ << ',' << ms() << ": evSocketCB; sock: " << sock << "; events: " << events << std::endl;
     Runner* runner = (Runner*) runner_;
@@ -122,7 +122,7 @@ protected:
     //std::cout << __LINE__ << ',' << ms() << ": deleteEvent: " << ev << std::endl;
     event_del (ev); event_free (ev);
   };
-  /** curl_socket_callback: CURL asks us to monitor the socket. */
+  /// curl_socket_callback: CURL asks us to monitor the socket.
   static int curlSocketCB (CURL* easy, curl_socket_t sock, int what, void* runner_, void* socketp) {
     //std::cout << __LINE__ << ',' << ms() << ": curlSocketCB; sock: " << sock << "; what: " << what;
     //std::cout << " (" << (what == 0 ? "none" : what == 1 ? "in" : what == 2 ? "out" : what == 3 ? "inout" : what == 4 ? "remove" : "?") << ")" << std::endl;
@@ -145,7 +145,7 @@ protected:
     }
     return 0;
   }
-  /** curl_multi_timer_callback: Schedule a CURL timer event or if `timeout_ms` is 0 then run immediately. */
+  /// curl_multi_timer_callback: Schedule a CURL timer event or if `timeout_ms` is 0 then run immediately.
   static int curlTimerCB (CURLM* multi, long timeout_ms, void* runner_) {
     //std::cout << __LINE__ << ',' << ms() << ": curlTimerCB; timeout_ms: " << timeout_ms << std::endl;
     if (timeout_ms == -1) return 0; // CURL tells us it doesn't need no timer.
@@ -188,18 +188,18 @@ public:
     return *this;
   }
 
-  /** Wait for the operation to complete, then call the `handler`, then free the `curl`. */
+  /// Wait for the operation to complete, then call the `handler`, then free the `curl`.
   void multi (CURL* curl, handler_t handler) {
     { std::lock_guard<std::recursive_mutex> lock (_mutex);
       _handlers.insert (std::make_pair (curl, std::make_pair (handler, event_t (nullptr, nullptr)))); }
     curl_multi_add_handle (_curlm, curl);
   }
-  /** Register a new job to be run on the thread loop. */
+  /// Register a new job to be run on the thread loop.
   JobInfo& job (const gstring& name) {
     std::lock_guard<std::recursive_mutex> lock (_mutex);
     return _jobs[name];
   }
-  /** Register a new job to be run on the thread loop. */
+  /// Register a new job to be run on the thread loop.
   void schedule (const gstring& name, float pauseSec, job_t job) {
     struct timespec ct; if (pauseSec > 0.f) clock_gettime (CLOCK_MONOTONIC, &ct);
     std::lock_guard<std::recursive_mutex> lock (_mutex);
@@ -212,7 +212,7 @@ public:
     std::lock_guard<std::recursive_mutex> lock (_mutex);
     _jobs.erase (name);
   }
-  /** Invoked automatically from a libevent timer; can also be invoked manually. */
+  /// Invoked automatically from a libevent timer; can also be invoked manually.
   void run() {
     _mutex.lock();
     checkForFinishedCurlJobs();
@@ -234,7 +234,7 @@ public:
     restartTimer();
   }
 
-  /** Expose CURLM. Useful for curl_multi_setopt (http://curl.haxx.se/libcurl/c/curl_multi_setopt.html). */
+  /// Expose CURLM. Useful for curl_multi_setopt (http://curl.haxx.se/libcurl/c/curl_multi_setopt.html).
   CURLM* curlm() const {return _curlm;}
 };
 

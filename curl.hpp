@@ -26,9 +26,10 @@ inline size_t curlReadFromGString (void *ptr, size_t size, size_t nmemb, void *u
 inline size_t curlWriteHeader (void *ptr, size_t size, size_t nmemb, void *curlPtr);
 
 /**
- * Simple HTTP requests using cURL.
- * Example:
- *   std::string w3 = glim::Curl() .http ("http://www.w3.org/") .go().str();
+ Simple HTTP requests using cURL.
+ Example: \code
+   std::string w3 = glim::Curl() .http ("http://www.w3.org/") .go().str();
+ \endcode
  */
 class Curl {
  protected:
@@ -55,12 +56,12 @@ class Curl {
   bool _needs_cleanup:1; ///< ~Curl will do `curl_easy_cleanup` if `true`.
   char _errorBuf[CURL_ERROR_SIZE];
 
-  /** @param cleanup can be turned off if the CURL is freed elsewhere. */
+  /// @param cleanup can be turned off if the CURL is freed elsewhere.
   Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     *_errorBuf = 0;}
-  /** Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless).
-   * @param cleanup can be turned off if the CURL is freed elsewhere. */
+  /// Wraps an existing handle (will invoke `curl_easy_cleanup` nevertheless).
+  /// @param cleanup can be turned off if the CURL is freed elsewhere.
   Curl (CURL* curl, bool cleanup = true): _curl (curl), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     *_errorBuf = 0;}
@@ -69,15 +70,15 @@ class Curl {
     if (_curl) {if (_needs_cleanup) curl_easy_cleanup (_curl); _curl = NULL;}
   }
 
-  /** Stores the content to be sent into an `std::string` inside `Curl`.\n
-   * NB: In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
+  /** Stores the content to be sent into an `std::string` inside `Curl`.
+   * NB: In order to have an effect this method should be used *before* the `http()` and `smtp()` methods. */
   template<typename STR> Curl& send (STR&& text) {
     _sendStr = std::forward<std::string> (text);
     _sendGStr.clear();
     _sent = 0;
     return *this;}
 
-  /** Adds "Content-Type" header into `_headers`. */
+  /// Adds "Content-Type" header into `_headers`.
   Curl& contentType (const char* ct) {
     char ctb[64]; gstring cth (sizeof (ctb), ctb, false, 0);
     cth << "Content-Type: " << ct << "\r\n";
@@ -85,15 +86,21 @@ class Curl {
     return *this;
   }
 
-  /** @param fullHeader is a full HTTP header and a newline, e.g. "User-Agent: Me\r\n". */
+  /// @param fullHeader is a full HTTP header and a newline, e.g. "User-Agent: Me\r\n".
   Curl& header (const char* fullHeader) {
     _headers = curl_slist_append (_headers, fullHeader);
     return *this;
   }
 
   /**
-   * Sets the majority of options for the http request.\n
-   * NB: If `send` was used with a non-empty string then `http` will use `CURLOPT_UPLOAD`, setting http method to `PUT`.
+   Sets the majority of options for the http request.
+   NB: If `send` was used with a non-empty string then `http` will use `CURLOPT_UPLOAD`, setting http method to `PUT` (use the `method()` to override).
+   \n
+   Example: \code
+     glim::Curl curl;
+     curl.http (url.c_str()) .go();
+     std::cout << curl.status() << std::endl << curl.str() << std::endl;
+   \endcode
    */
   Curl& http (const char* url, int timeoutSec = 20) {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
@@ -118,11 +125,11 @@ class Curl {
   }
 
   /**
-   * Set options for smtp request.\n
-   * Example: \code
-   *   long rc = Curl().send ("Subject: subject\r\n\r\n" "text\r\n") .smtp ("from", "to") .go().status();
-   *   if (rc != 250) std::cerr << "Error sending email: " << rc << std::endl;
-   * \endcode */
+   Set options for smtp request.
+   Example: \code
+     long rc = glim::Curl().send ("Subject: subject\r\n\r\n" "text\r\n") .smtp ("from", "to") .go().status();
+     if (rc != 250) std::cerr << "Error sending email: " << rc << std::endl;
+   \endcode */
   Curl& smtp (const char* from, const char* to) {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading
     curl_easy_setopt (_curl, CURLOPT_URL, "smtp://127.0.0.1");
@@ -150,21 +157,22 @@ class Curl {
     return *this;
   }
 
-  /** Uses `CURLOPT_CUSTOMREQUEST` to set the http method.\n
-   * Can be used both before and after the `http` method.\n
-   * Example sending a POST request to ElasticSearch: \code
-   *   glim::Curl curl;
-   *   curl.send (C2GSTRING (R"({"query":{"match_all":{}},"facets":{"tags":{"terms":{"field":"tags","size":1000}}}})"));
-   *   curl.method ("POST") .http ("http://127.0.0.1:9200/froples/frople/_search", 120);
-   *   if (curl.verbose().go().status() != 200) GTHROW ("Error fetching tags: " + std::to_string (curl.status()) + ", " + curl.str());
-   *   cout << curl.gstr() << endl;
-   * \endcode */
+  /**
+   Uses `CURLOPT_CUSTOMREQUEST` to set the http method.
+   Can be used both before and after the `http` method.\n
+   Example sending a POST request to ElasticSearch: \code
+     glim::Curl curl;
+     curl.send (C2GSTRING (R"({"query":{"match_all":{}},"facets":{"tags":{"terms":{"field":"tags","size":1000}}}})"));
+     curl.method ("POST") .http ("http://127.0.0.1:9200/froples/frople/_search", 120);
+     if (curl.verbose().go().status() != 200) GTHROW ("Error fetching tags: " + std::to_string (curl.status()) + ", " + curl.str());
+     cout << curl.gstr() << endl;
+   \endcode */
   Curl& method (const char* method) {
     curl_easy_setopt (_curl, CURLOPT_CUSTOMREQUEST, method);
     return *this;
   }
 
-  /** Setup a handler to process the headers CURL gets from the response.\n
+  /** Setup a handler to process the headers CURL gets from the response.
    * "The header callback will be called once for each header and only complete header lines are passed on to the callback".\n
    * See http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTHEADERFUNCTION */
   Curl& headerListener (std::function<void (const char* header, int len)> listener) {
@@ -174,13 +182,13 @@ class Curl {
     return *this;
   }
 
-  /** Whether to print debug information to CURLOPT_STDERR. */
+  /// Whether to print debug information to CURLOPT_STDERR.
   Curl& verbose (bool on = true) {
     curl_easy_setopt (_curl, CURLOPT_VERBOSE, on ? 1L : 0L);
     return *this;
   }
 
-  /** Reset the buffers and perform the CURL request. */
+  /// Reset the buffers and perform the CURL request.
   Curl& go() {
     _got.clear();
     *_errorBuf = 0;
@@ -198,8 +206,8 @@ class Curl {
     return status;}
 };
 
-/** Moves the content to be sent into a `glim::gstring` inside `Curl`.\n
- * NB: In order to have an effect this method should be used *before* the `http` and `smtp` methods. */
+/** Moves the content to be sent into a `glim::gstring` inside `Curl`.
+ * NB: In order to have an effect this method should be used *before* the `http()` and `smtp()` methods. */
 template<> inline Curl& Curl::send<gstring> (gstring&& text) {
   _sendStr.clear();
   _sendGStr = std::move (text);
@@ -229,10 +237,7 @@ inline size_t curlWriteHeader (void *ptr, size_t size, size_t nmemb, void *curlP
   return (size_t) len;
 }
 
-/**
- * Example:
- *   std::string w3 = glim::curl2str ("http://www.w3.org/");
- */
+/// Example: std::string w3 = glim::curl2str ("http://www.w3.org/");
 inline std::string curl2str (const char* url, int timeoutSec = 20) {
   try {
     return glim::Curl().http (url, timeoutSec) .go().str();
