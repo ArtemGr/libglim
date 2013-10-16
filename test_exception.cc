@@ -4,6 +4,8 @@
 #include <typeinfo>
 #include <assert.h>
 
+// NB: Controlling exceptions across shared object (.so) boundaries is tested separately in frople/src/test.cpp/testExceptionControl.
+
 static void testThrowLine() {
   int line = 0; std::string message; try {
     line = __LINE__; GTHROW ("message");

@@ -1,15 +1,10 @@
 #ifndef _GLIM_EXCEPTION_HPP_INCLUDED
 #define _GLIM_EXCEPTION_HPP_INCLUDED
 
-/** \file
- * Unfortunately this file is not entirely header-only
- * because the thread-local static variables aren't reliable across shared libraries in GCC 4.7.2.
- * Include the code into the `main` module with:
- *
- *     #define _GLIM_EXCEPTION_CODE
- *     #include <glim/exception.hpp>
- *
- * Should be fixed with `thread_local` in [gcc-4.8](http://gcc.gnu.org/gcc-4.8/changes.html). */
+/// \file
+/// Exceptions with configurable behaviour.
+/// Requires `thread_local` support introduced in [gcc-4.8](http://gcc.gnu.org/gcc-4.8/changes.html)
+/// (`__thread` is not reliable with GCC 4.7.2 across shared libraries).
 
 #include <stdexcept>
 #include <string>
@@ -17,12 +12,12 @@
 #include <stdlib.h> // free
 #include <unistd.h> // write
 
-/** Throws `::glim::Exception` passing the current file and line into constructor. */
+/// Throws `::glim::Exception` passing the current file and line into constructor.
 #define GTHROW(message) throw ::glim::Exception (message, __FILE__, __LINE__)
-/** Throws a `::glim::Exception` derived exception `name` passing the current file and line into constructor. */
+/// Throws a `::glim::Exception` derived exception `name` passing the current file and line into constructor.
 #define GNTHROW(name, message) throw name (message, __FILE__, __LINE__)
-/** Helps defining new `::glim::Exception`-based exceptions.\n
- * Named exceptions might be useful in a debugger. */
+/// Helps defining new `::glim::Exception`-based exceptions.
+/// Named exceptions might be useful in a debugger.
 #define G_DEFINE_EXCEPTION(name) \
   struct name: public ::glim::Exception { \
     name (const ::std::string& message, const char* file, int line): ::glim::Exception (message, file, line) {} \
@@ -66,16 +61,12 @@ namespace glim {
 // cat /proc/`pidof FropleAndImg2`/maps | grep libfrople
 // addr2line -pifCa -e /usr/local/lib/libfrople.so `perl -e 'printf ("%x", 0x2aef5b45eb8a - 0x2aef5b363000)'`
 
-void captureBacktrace (void* stdStringPtr);
+inline void captureBacktrace (void* stdStringPtr);
 
-extern __thread uint32_t EXCEPTION_OPTIONS;
 typedef void (*exception_handler_fn)(void*);
-extern __thread exception_handler_fn EXCEPTION_HANDLER;
-extern __thread void* EXCEPTION_HANDLER_ARG;
 
-/**
- * Exception with file and line information and optional stack trace capture.
- */
+/// Exception with file and line information and optional stack trace capture.
+/// Requires `thread_local` support ([gcc-4.8](http://gcc.gnu.org/gcc-4.8/changes.html)).
 class Exception: public std::runtime_error {
  protected:
   const char* _file; int32_t _line;
@@ -105,7 +96,7 @@ class Exception: public std::runtime_error {
  public:
   /** The reference to the thread-local options. */
   inline static uint32_t& options() {
-    //static __thread uint32_t EXCEPTION_OPTIONS = 0; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    static thread_local uint32_t EXCEPTION_OPTIONS = 0;
     return EXCEPTION_OPTIONS;
   }
   enum Options: uint32_t {
@@ -116,12 +107,12 @@ class Exception: public std::runtime_error {
 
   /** The pointer to the thread-local exception handler. */
   inline static exception_handler_fn* handler() {
-    //static __thread handler_fn EXCEPTIONS_HANDLER = nullptr; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    static thread_local exception_handler_fn EXCEPTION_HANDLER = nullptr;
     return &EXCEPTION_HANDLER;
   }
   /** The pointer to the thread-local argument for the exception handler. */
   inline static void** handlerArg() {
-    //static __thread void* EXCEPTION_HANDLER_ARG = nullptr; // Unfortunately this isn't reliable with GCC 4.7.2 across shared libraries.
+    static thread_local void* EXCEPTION_HANDLER_ARG = nullptr;
     return &EXCEPTION_HANDLER_ARG;
   }
 
@@ -143,13 +134,13 @@ class Exception: public std::runtime_error {
   }
 };
 
-/** RAII control of thrown `Exception`s.\n
- * Example: \code
- *   glim::ExceptionControl trace (glim::Exception::Options::CAPTURE_TRACE);
- * \endcode
- * Modifies the `Exception` options via a thread-local variable and restores them back upon destruction.\n
- * Currently uses http://gcc.gnu.org/onlinedocs/gcc-4.7.2/gcc/Thread_002dLocal.html
- * (might use C++11 `thread_local` in the future). */
+/// RAII control of thrown `Exception`s.
+/// Example: \code
+///   glim::ExceptionControl trace (glim::Exception::Options::CAPTURE_TRACE);
+/// \endcode
+/// Modifies the `Exception` options via a thread-local variable and restores them back upon destruction.\n
+/// Currently uses http://gcc.gnu.org/onlinedocs/gcc-4.7.2/gcc/Thread_002dLocal.html
+/// (might use C++11 `thread_local` in the future).
 class ExceptionControl {
  protected:
   uint32_t _savedOptions;
@@ -184,20 +175,12 @@ public:
 
 } // namespace glim
 
-#endif // _GLIM_EXCEPTION_HPP_INCLUDED
-
-#ifdef _GLIM_EXCEPTION_CODE
-
 #if defined(__GNUC__) && (defined (__linux__) || defined (_SYSTYPE_BSD))
 # include <execinfo.h> // backtrace; http://www.gnu.org/software/libc/manual/html_node/Backtraces.html
 # define _GLIM_USE_EXECINFO
 #endif
 
 namespace glim {
-
-__thread uint32_t EXCEPTION_OPTIONS = 0;
-__thread exception_handler_fn EXCEPTION_HANDLER = nullptr;
-__thread void* EXCEPTION_HANDLER_ARG = nullptr;
 
 /** If `stdStringPtr` is not null then backtrace is saved there (must point to an std::string instance),
  * otherwise printed to write(2). */
@@ -218,8 +201,7 @@ void captureBacktrace (void* stdStringPtr) {
 
 } // namespace glim
 
-#undef _GLIM_EXCEPTION_CODE
-#endif // _GLIM_EXCEPTION_CODE
+#endif // _GLIM_EXCEPTION_HPP_INCLUDED
 
 /**
  * Special handler for ALL exceptions. Usage:
