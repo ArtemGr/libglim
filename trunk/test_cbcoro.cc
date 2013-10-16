@@ -2,7 +2,6 @@
 // http://www.boost.org/doc/libs/1_53_0/libs/context/doc/html/index.html
 // g++ -std=c++11 -O1 -Wall -g test_cbcoro.cc -pthread && ./a.out
 
-#define _GLIM_EXCEPTION_CODE
 #include <glim/exception.hpp>
 #include <glim/NsecTimer.hpp>
 

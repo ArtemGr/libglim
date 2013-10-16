@@ -1,4 +1,3 @@
-#define _GLIM_EXCEPTION_CODE // Include the code needed for glim::Exception.
 #include "rethinkdb.hpp"
 #include "gstring.hpp"
 #include "ql2.pb.cc"
