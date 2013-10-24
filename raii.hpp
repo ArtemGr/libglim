@@ -9,7 +9,7 @@ template<typename Fun> struct RAIIFun {
   Fun _fun;
   RAIIFun (RAIIFun&&) = default;
   RAIIFun (const RAIIFun&) = default;
-  template<typename FunArg> RAIIFun (FunArg fun): _fun (std::forward<Fun> (fun)) {}
+  template<typename FunArg> RAIIFun (FunArg&& fun): _fun (std::forward<Fun> (fun)) {}
   ~RAIIFun() {_fun();}
 };
 
