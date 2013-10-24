@@ -23,6 +23,11 @@
     name (const ::std::string& message, const char* file, int line): ::glim::Exception (message, file, line) {} \
   }
 
+// Workaround to compile under GCC 4.7.
+#if defined (__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ == 7 && !defined (thread_local)
+# define thread_local __thread
+#endif
+
 namespace glim {
 
 // Ideas:
