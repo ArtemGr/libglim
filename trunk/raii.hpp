@@ -6,6 +6,8 @@ namespace glim {
 /// RAII helper. Keeps the functor and runs it in the destructor.
 /// The idea to name it `finally` comes from http://www.codeproject.com/Tips/476970/finally-clause-in-Cplusplus.
 /// Example: \code
+///   finally unmap ([&]() {munmap (fd, size);});
+///   // or
 ///   auto unmap = raiiFun ([&]() {munmap (fd, size);});
 /// \endcode
 template<typename Fun> struct finally {
