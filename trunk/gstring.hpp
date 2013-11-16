@@ -367,11 +367,18 @@ public:
     length (0); append (cstr, (uint32_t) clen); return true;}
   gstring& operator << (const gstring& gs) {append (gs.data(), gs.length()); return *this;}
   gstring& operator << (const std::string& str) {append (str.data(), str.length()); return *this;}
-  gstring& operator << (const char* cstr) {append (cstr, ::strlen (cstr)); return *this;}
+  gstring& operator << (const char* cstr) {if (cstr) append (cstr, ::strlen (cstr)); return *this;}
   gstring& operator << (char ch) {append (ch); return *this;}
   gstring& operator << (int iv) {append64 (iv, 10, sizeof (int) * 3); return *this;}
   gstring& operator << (long iv) {append64 (iv, 10, sizeof (long) * 3); return *this;}
   gstring& operator << (long long iv) {append64 (iv, 10, sizeof (long long) * 3); return *this;}
+  gstring& operator << (double dv) {
+    uint32_t len = length();
+    reserve (len + 32);
+    int rc = snprintf (endp(), 31, "%f", dv);
+    if (rc > 0) {length (len + std::min (rc, 31));}
+    return *this;
+  }
 
   bool operator < (const gstring &gs) const {
     uint32_t len1 = length(); uint32_t len2 = gs.length();
