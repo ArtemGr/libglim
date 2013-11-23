@@ -27,7 +27,7 @@ static void testThrowLine() {
   assert (name.find ("FooEx") != std::string::npos);
 
   message.clear(); try {
-    glim::ExceptionControl plainWhat (glim::Exception::Options::PLAIN_WHAT);
+    glim::ExceptionControl plainWhat (glim::Exception::PLAIN_WHAT | glim::Exception::RENDEZVOUS);
     GTHROW ("bar");
   } catch (const std::exception& ex) {
     message = ex.what();
@@ -38,7 +38,7 @@ static void testThrowLine() {
 
 static void testBacktrace() {
   assert (glim::Exception::options() == 0);
-  glim::ExceptionControl captureTrace (glim::Exception::Options::CAPTURE_TRACE);
+  glim::ExceptionControl captureTrace (glim::Exception::CAPTURE_TRACE);
   assert (glim::Exception::options() != 0);
   std::string message;
   try {
@@ -53,7 +53,7 @@ static void testBacktrace() {
 static void testAllExceptionsHack() {
   assert (glim::Exception::options() == 0);
   std::string traceBuf;
-  glim::ExceptionHandler traceExceptions (glim::Exception::Options::HANDLE_ALL, glim::captureBacktrace, &traceBuf);
+  glim::ExceptionHandler traceExceptions (glim::Exception::HANDLE_ALL, glim::captureBacktrace, &traceBuf);
   assert (glim::Exception::options() != 0);
   try {
     throw "catch me"; // Catched by `_GLIM_ALL_EXCEPTIONS_CODE` and handled with `glim::ExceptionControl::backtrace`.

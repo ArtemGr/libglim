@@ -78,7 +78,7 @@ class Exception: public std::runtime_error {
   std::string _what;
   uint32_t _options;
 
-  /** Append [{file}:{line}] into `buf`. */
+  /// Append [{file}:{line}] into `buf`.
   void appendLine (std::string& buf) const {
     if (_file || _line > 0) {
       buf.append (1, '[');
@@ -88,8 +88,9 @@ class Exception: public std::runtime_error {
     }
   }
 
-  /** Append a stack trace to `_what`. */
+  /// Append a stack trace to `_what`.
   void capture() {
+    if (_options & RENDEZVOUS) rendezvous();
     if (_options & CAPTURE_TRACE) {
       appendLine (_what);
       _what += "[at ";
@@ -98,6 +99,11 @@ class Exception: public std::runtime_error {
       _what += std::runtime_error::what();
     }
   }
+
+  /// Invoked when the `RENDEZVOUS` option is set in order to help the debugger catch the exception (break glim::Exception::rendezvous).
+  void rendezvous() const __attribute__((noinline)) {
+    asm ("");  // Prevents the function from being optimized away.
+  }
  public:
   /** The reference to the thread-local options. */
   inline static uint32_t& options() {
@@ -105,9 +111,10 @@ class Exception: public std::runtime_error {
     return EXCEPTION_OPTIONS;
   }
   enum Options: uint32_t {
-    PLAIN_WHAT = 1, ///< Pass `what` as is, do not add any information to it.
-    HANDLE_ALL = 1 << 1, ///< Run the custom handler from `__cxa_throw`.
-    CAPTURE_TRACE = 1 << 2 ///< Append a stack trace into the `Exception::_what` (with the help of the `captureBacktrace`).
+    PLAIN_WHAT = 1,  ///< Pass `what` as is, do not add any information to it.
+    HANDLE_ALL = 1 << 1,  ///< Run the custom handler from `__cxa_throw`.
+    CAPTURE_TRACE = 1 << 2,  ///< Append a stack trace into the `Exception::_what` (with the help of the `captureBacktrace`).
+    RENDEZVOUS = 1 << 3  ///< Call the rendezvous function in `throw` and in `what`, so that the GDB can catch it (break glim::Exception::rendezvous).
   };
 
   /** The pointer to the thread-local exception handler. */
@@ -129,6 +136,7 @@ class Exception: public std::runtime_error {
     capture();}
   ~Exception() throw() {}
   virtual const char* what() const throw() {
+    if (_options & RENDEZVOUS) rendezvous();
     if (_options & PLAIN_WHAT) return std::runtime_error::what();
     std::string& buf = const_cast<std::string&> (_what);
     if (buf.empty()) {
@@ -150,7 +158,7 @@ class ExceptionControl {
  protected:
   uint32_t _savedOptions;
  public:
-  ExceptionControl (Exception::Options newOptions) {
+  ExceptionControl (uint32_t newOptions) {
     uint32_t& options = Exception::options();
     _savedOptions = options;
     options = newOptions;
