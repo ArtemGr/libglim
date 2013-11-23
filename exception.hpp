@@ -100,10 +100,6 @@ class Exception: public std::runtime_error {
     }
   }
 
-  /// Invoked when the `RENDEZVOUS` option is set in order to help the debugger catch the exception (break glim::Exception::rendezvous).
-  void rendezvous() const __attribute__((noinline)) {
-    asm ("");  // Prevents the function from being optimized away.
-  }
  public:
   /** The reference to the thread-local options. */
   inline static uint32_t& options() {
@@ -126,6 +122,11 @@ class Exception: public std::runtime_error {
   inline static void** handlerArg() {
     static thread_local void* EXCEPTION_HANDLER_ARG = nullptr;
     return &EXCEPTION_HANDLER_ARG;
+  }
+
+  /// Invoked when the `RENDEZVOUS` option is set in order to help the debugger catch the exception (break glim::Exception::rendezvous).
+  static void rendezvous() __attribute__((noinline)) {
+    asm ("");  // Prevents the function from being optimized away.
   }
 
   Exception (const std::string& message):
@@ -174,7 +175,7 @@ protected:
   exception_handler_fn _savedHandler;
   void* _savedHandlerArg;
 public:
-  ExceptionHandler (Exception::Options newOptions, exception_handler_fn handler, void* handlerArg) {
+  ExceptionHandler (uint32_t newOptions, exception_handler_fn handler, void* handlerArg) {
     uint32_t& options = Exception::options(); _savedOptions = options; options = newOptions;
     exception_handler_fn* handler_ = Exception::handler(); _savedHandler = *handler_; *handler_ = handler;
     void** handlerArg_ = Exception::handlerArg(); _savedHandlerArg = *handlerArg_; *handlerArg_ = handlerArg;
@@ -242,7 +243,8 @@ extern "C" void __cxa_throw (void* thrown_exception, void* tinfo, void (*dest)(v
 
   using namespace glim;
   uint32_t options = Exception::options();
-  if (options & Exception::Options::HANDLE_ALL) {
+  if (options & Exception::RENDEZVOUS) Exception::rendezvous();
+  if (options & Exception::HANDLE_ALL) {
     exception_handler_fn handler = *Exception::handler();
     if (handler) handler (*Exception::handlerArg());
   }
