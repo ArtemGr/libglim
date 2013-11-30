@@ -417,6 +417,7 @@ public:
 
   /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
   long intAt (uint32_t pos, uint32_t* after = nullptr, int base = 10) const {
+    // BTW: http://www.kumobius.com/2013/08/c-string-to-int/
     const uint32_t len = length(); char* buf = (char*) _buf;
     if (pos >= len || buf == nullptr) GTHROW ("gstring: intAt: pos >= len");
     char* endptr = 0;
