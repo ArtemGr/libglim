@@ -14,6 +14,7 @@
 #include <event2/event.h> // cf. hiperfifo.cpp at http://article.gmane.org/gmane.comp.web.curl.library/37752
 
 #include <time.h>
+#include <stdlib.h>  // rand
 
 #include "gstring.hpp"
 #include "exception.hpp"
@@ -207,6 +208,14 @@ public:
     jobInfo.job = job;
     jobInfo.pauseSec = pauseSec;
     if (pauseSec > 0.f) jobInfo.ran = ct; // If we need a pause then we also need to know when the job was scheduled.
+  }
+  /// Register a new job to be run on the thread loop.
+  void schedule (float pauseSec, job_t job) {
+    // Find a unique job name.
+    anotherName:
+      GSTRING_ON_STACK (name, 64) << "job" << rand();
+      if (_jobs.find (name) != _jobs.end()) goto anotherName;
+    schedule (name, pauseSec, std::move (job));
   }
   void removeJob (const gstring& name) {
     std::lock_guard<std::recursive_mutex> lock (_mutex);
