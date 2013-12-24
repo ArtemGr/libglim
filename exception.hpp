@@ -8,6 +8,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <sstream>
 #include <stdint.h>
 #include <stdlib.h> // free
 #include <unistd.h> // write
@@ -81,10 +82,12 @@ class Exception: public std::runtime_error {
   /// Append [{file}:{line}] into `buf`.
   void appendLine (std::string& buf) const {
     if (_file || _line > 0) {
-      buf.append (1, '[');
-      if (_file) buf.append (_file);
-      if (_line >= 0) buf.append (1, ':') .append (std::to_string (_line));
-      buf.append ("] ");
+      std::ostringstream oss;
+      oss << '[';
+      if (_file) oss << _file;
+      if (_line >= 0) oss << ':' << _line;
+      oss << "] ";
+      buf.append (oss.str());
     }
   }
 
