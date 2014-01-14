@@ -196,10 +196,14 @@ class Curl {
     return *this;
   }
 
-  std::string str() const {return _got;}
+  /// The contents of the response.
+  const std::string& str() const {return _got;}
+  /// CString of `str`.
   const char* c_str() const {return _got.c_str();}
+  /// Returns a gstring "view" into `str`.
   gstring gstr() const {return gstring (0, (void*) _got.data(), false, _got.size());}
 
+  /// The status of the response (For HTTP it's 200 ok, 404 not found, 500 error, etc).
   long status() const {
     long status; CURLcode err = curl_easy_getinfo (_curl, CURLINFO_RESPONSE_CODE, &status);
     if (err) {
