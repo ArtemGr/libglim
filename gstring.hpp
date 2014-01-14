@@ -24,9 +24,10 @@ limitations under the License.
  */
 
 #include <assert.h>
-#include <stdlib.h> // malloc, realloc, free
+#include <stdlib.h>  // malloc, realloc, free
 #include <stdint.h>
-#include <string.h> // memcpy, memmem
+#include <string.h>  // memcpy, memmem
+#include <stdio.h>  // snprintf
 #include <stdexcept>
 #include <iostream>
 #include <iterator>
@@ -312,7 +313,7 @@ public:
     if (((uint32_t) 1 << power) < to) {
       ++power;
       while (((uint32_t) 1 << power) < to) ++power;
-      if (power > 24) GTHROW ("gstring too large: " + std::to_string (to));
+      if (power > 24) {GSTRING_ON_STACK (error, 64) << "gstring too large: " << (int) to; GTHROW (error.str());}
     } else if (power) {
       // No need to grow.
       return;
