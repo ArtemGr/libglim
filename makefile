@@ -93,6 +93,7 @@ install:
 	cp cbcoro.hpp ${INSTALL2}/
 	cp raii.hpp ${INSTALL2}/
 	cp rethinkdb.hpp ql2.pb.* ${INSTALL2}/
+	cp channel.hpp ${INSTALL2}/
 
 uninstall:
 	rm -rf ${INSTALL2}
