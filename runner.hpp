@@ -21,6 +21,8 @@
 
 namespace glim {
 
+// TODO: Make sure that all cURL methods are called from a single thread in order to avoid the hard-to-debug errors.
+
 /// Run CURLM requests and completion handlers, as well as other periodic jobs.
 class Runner {
   G_DEFINE_EXCEPTION (RunnerEx);
@@ -56,6 +58,20 @@ protected:
   jobs_map_t _jobs;
   CURLM* _curlm = nullptr;
   struct event* _timer = nullptr;
+
+  /// Schedule a function to be run on the event loop. Useful to run all cURL methods on the single event loop thread.
+  template<typename F>
+  void doInEv (F fun, struct timeval after = {0, 0}) {
+    struct Dugout {F fun; struct event* timer; Dugout (F&& fun): fun (std::move (fun)), timer (nullptr) {}} *dugout = new Dugout (std::move (fun));
+    event_callback_fn cb = [](evutil_socket_t, short, void* dugout_)->void {
+      Dugout* dugout = static_cast<Dugout*> (dugout_);
+      event_free (dugout->timer); dugout->timer = nullptr;
+      F fun = std::move (dugout->fun); delete dugout;
+      fun();
+    };
+    dugout->timer = evtimer_new (_evbase.get(), cb, dugout);
+    evtimer_add (dugout->timer, &after);
+  }
 
   bool shouldRun (jobs_map_t::value_type& entry, const struct timespec& ct) {
     JobInfo& jobInfo = entry.second;
@@ -161,24 +177,30 @@ protected:
   }
 public:
   Runner (std::shared_ptr<struct event_base> evbase, errlog_t errlog): _evbase (evbase), _errlog (errlog) {
-    _curlm = curl_multi_init(); if (!_curlm) GNTHROW (RunnerEx, "!curl_multi_init");
-    auto check = [this](CURLMcode rc) {if (rc != CURLM_OK) {curl_multi_cleanup (_curlm); GNTHROW (RunnerEx, "curl_multi_setopt: " + std::to_string (rc));}};
-    check (curl_multi_setopt (_curlm, CURLMOPT_SOCKETDATA, this));
-    curl_socket_callback socketCB = curlSocketCB; check (curl_multi_setopt (_curlm, CURLMOPT_SOCKETFUNCTION, socketCB));
-    check (curl_multi_setopt (_curlm, CURLMOPT_TIMERDATA, this));
-    curl_multi_timer_callback curlTimerCB_ = curlTimerCB; check (curl_multi_setopt (_curlm, CURLMOPT_TIMERFUNCTION, curlTimerCB_));
-    event_callback_fn evTimerCB_ = evTimerCB; _timer = evtimer_new (evbase.get(), evTimerCB_, this);
-    restartTimer();
+    doInEv ([this]() {
+      std::lock_guard<std::recursive_mutex> lock (_mutex);
+      _curlm = curl_multi_init(); if (!_curlm) GNTHROW (RunnerEx, "!curl_multi_init");
+      auto check = [this](CURLMcode rc) {if (rc != CURLM_OK) {curl_multi_cleanup (_curlm); GNTHROW (RunnerEx, "curl_multi_setopt: " + std::to_string (rc));}};
+      check (curl_multi_setopt (_curlm, CURLMOPT_SOCKETDATA, this));
+      curl_socket_callback socketCB = curlSocketCB; check (curl_multi_setopt (_curlm, CURLMOPT_SOCKETFUNCTION, socketCB));
+      check (curl_multi_setopt (_curlm, CURLMOPT_TIMERDATA, this));
+      curl_multi_timer_callback curlTimerCB_ = curlTimerCB; check (curl_multi_setopt (_curlm, CURLMOPT_TIMERFUNCTION, curlTimerCB_));
+      event_callback_fn evTimerCB_ = evTimerCB; _timer = evtimer_new (_evbase.get(), evTimerCB_, this);
+      restartTimer();
+    });
   }
   ~Runner() {
     //std::cout << __LINE__ << ',' << ms() << ": ~Runner" << std::endl;
     std::lock_guard<std::recursive_mutex> lock (_mutex);
     if (_timer) {evtimer_del (_timer); event_free (_timer); _timer = nullptr;}
-    for (auto it = _handlers.begin(), end = _handlers.end(); it != end; ++it) {
-      curl_multi_remove_handle (_curlm, it->first);
-      curl_easy_cleanup (it->first);
-    }
-    if (_curlm) {curl_multi_cleanup (_curlm); _curlm = nullptr;}
+    doInEv ([curlm = _curlm, handlers = std::move (_handlers)]() {
+      for (auto it = handlers.begin(), end = handlers.end(); it != end; ++it) {
+        curl_multi_remove_handle (curlm, it->first);
+        curl_easy_cleanup (it->first);
+      }
+      if (curlm) {curl_multi_cleanup (curlm);}
+    });
+    _curlm = nullptr;
   }
 
   /** Turns HTTP Pipelining on (or off).
@@ -192,8 +214,10 @@ public:
   /// Wait for the operation to complete, then call the `handler`, then free the `curl`.
   void multi (CURL* curl, handler_t handler) {
     { std::lock_guard<std::recursive_mutex> lock (_mutex);
-      _handlers.insert (std::make_pair (curl, std::make_pair (handler, event_t (nullptr, nullptr)))); }
-    curl_multi_add_handle (_curlm, curl);
+      _handlers.insert (std::make_pair (curl, std::make_pair (std::move (handler), event_t (nullptr, nullptr)))); }
+    doInEv ([this,curl]() {
+      curl_multi_add_handle (_curlm, curl);
+    });
   }
   /// Register a new job to be run on the thread loop.
   JobInfo& job (const gstring& name) {
