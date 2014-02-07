@@ -149,6 +149,7 @@ class Curl {
       curl_easy_setopt (_curl, CURLOPT_READFUNCTION, curlReadFromGString);
       curl_easy_setopt (_curl, CURLOPT_READDATA, this);
     }
+    curl_easy_setopt (_curl, CURLOPT_UPLOAD, 1L);  // cURL now needs this to actually send the email, cf. "http://curl.haxx.se/mail/lib-2013-12/0152.html".
     return *this;
   }
 
