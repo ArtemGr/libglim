@@ -14,6 +14,7 @@ using glim::gstring;
 
 static void testIterators();
 static void testBoost();
+static void testStrftime();
 
 int main () {
   std::cout << "Testing gstring.hpp ... " << std::flush;
@@ -92,6 +93,7 @@ int main () {
 
   testIterators();
   testBoost();
+  testStrftime();
 
   std::cout << "pass." << std::endl;
   return 0;
@@ -111,4 +113,19 @@ static void testBoost() {
 
   gstring up ("FOO"); boost::to_lower (up);
   assert (up == "foo");
+}
+
+static void testStrftime() {
+  time_t tim = time(0); struct tm ltime; memset (&ltime, 0, sizeof ltime); if (!localtime_r (&tim, &ltime)) GTHROW ("!localtime_r");
+  GSTRING_ON_STACK (t1, 8); assert (t1.capacity() == 8);
+  t1.appendTime ("", &ltime); assert (t1 == "");
+  t1.appendTime ("foo %a, %d %b %Y %T %z bar", &ltime);
+  assert (t1.capacity() > 8);  // Capacity increased to account for the large string.
+  assert (boost::starts_with (t1, "foo "));
+  assert (boost::ends_with (t1, " bar"));
+
+  GSTRING_ON_STACK (t2, 8); assert (t2.capacity() == 8);
+  t2.appendTime ("%H", &ltime);
+  assert (t2.capacity() == 8);  // 8 is big enought, isn't it?
+  assert (t2.intAt (0) == ltime.tm_hour);  // NB: intAt is safe here because strftime adds an uncounted null-terminator.
 }
