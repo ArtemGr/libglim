@@ -75,7 +75,7 @@ class Curl {
   /** Stores the content to be sent into an `std::string` inside `Curl`.
    * NB: In order to have an effect this method should be used *before* the `http()` and `smtp()` methods. */
   template<typename STR> Curl& send (STR&& text) {
-    _sendStr = std::forward<std::string> (text);
+    _sendStr = std::forward<STR> (text);
     _sendGStr.clear();
     _sent = 0;
     return *this;}
