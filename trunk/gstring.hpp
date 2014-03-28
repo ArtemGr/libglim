@@ -208,7 +208,7 @@ public:
   uint32_t length() const {return _meta & LENGTH_MASK;}
   size_t size() const {return _meta & LENGTH_MASK;}
   bool empty() const {return (_meta & LENGTH_MASK) == 0;}
-  std::string str() const {return std::string ((const char*) _buf, size());}
+  std::string str() const {size_t len = size(); return len ? std::string ((const char*) _buf, len) : std::string();}
   /// NB: might move the string to a new buffer.
   const char* c_str() const {
     uint32_t len = length(); if (len == 0) return "";
@@ -389,6 +389,19 @@ public:
     return len1 < len2;
   }
 
+  /// Asks `strftime` to generate a time string. Capacity is increased if necessary (up to a limit of +1024 bytes).
+  gstring& appendTime (const char* format, struct tm* tmv) {
+    int32_t pos = length(), cap = capacity(), left = cap - pos;
+    if (left < 8) {reserve (pos + 8); return appendTime (format, tmv);}
+    size_t got = strftime ((char*) _buf + pos, left, format, tmv);
+    if (got == 0) {
+      if (left > 1024) return *this;  // Guard against perpetual growth.
+      reserve (pos + left * 2); return appendTime (format, tmv);
+    }
+    length (pos + got);
+    return *this;
+  }
+
   /// Append the characters to this `gstring` wrapping them in the netstring format.
   gstring& appendNetstring (const char* cstr, uint32_t clen) {
     *this << (int) clen; append (':'); append (cstr, clen); append (','); return *this;}
@@ -416,7 +429,7 @@ public:
     return gstring (0, buf + pos, false, next - pos);
   }
 
-  /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit).
+  /// Wrapper around strtol, not entirely safe (make sure the string is terminated with a non-digit, by calling c_str, for example).
   long intAt (uint32_t pos, uint32_t* after = nullptr, int base = 10) const {
     // BTW: http://www.kumobius.com/2013/08/c-string-to-int/
     const uint32_t len = length(); char* buf = (char*) _buf;
@@ -424,7 +437,7 @@ public:
     char* endptr = 0;
     long lv = ::strtol (buf + pos, &endptr, base);
     uint32_t next = endptr - buf;
-    if (next >= len) GTHROW ("gstring: intAt: endptr >= len");
+    if (next > len) GTHROW ("gstring: intAt: endptr > len");
     if (after) *after = next;
     return lv;
   }
