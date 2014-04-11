@@ -6,10 +6,8 @@
 # include "ldb.hpp" // Reuse `ldbSerialize` and `ldbDeserialize` in the `with` method.
 #endif
 namespace glim {
-/** Serialization with lazy parsing: fields are accessed without "unpacking" the byte array.
- * Changes are stored separately, allowing the user to know exactly what fields has been changed and compare the old values to the new ones. */
-class SerializablePool {
-protected:
+
+namespace SerializablePoolHelpers {
   struct Impl {
     /**
      * Pool format: \code
@@ -25,7 +23,24 @@ protected:
     Impl() = default;
     Impl (const gstring& poolBytes): _pool (poolBytes), _readOnly (false) {}
   };
-  std::shared_ptr<Impl> _impl;
+
+  /// Can be used instead of shared_ptr<Impl> to avoid the shared_ptr indirection when the SerializablePoolTpl isn't going to be copied.
+  /// Example: \code glim::InlineSerializablePool temporaryPool (bytes); \endcode
+  struct InlinePtr {
+    Impl _impl;
+    Impl* get() const {return const_cast<Impl*> (&_impl);}
+    Impl* operator->() const {return const_cast<Impl*> (&_impl);}
+    Impl& operator*() const {return const_cast<Impl&> (_impl);}
+  };
+}
+
+/** Serialization with lazy parsing: fields are accessed without "unpacking" the byte array.
+ * Changes are stored separately, allowing the user to know exactly what fields has been changed and compare the old values to the new ones. */
+template <typename PI>
+class SerializablePoolTpl {
+protected:
+  using Impl = SerializablePoolHelpers::Impl;
+  PI _impl;
   /** @param ref Return a zero-copy view. The view should not be used outside of the pool buffer's lifetime. */
   static gstring original (const gstring& pool, uint32_t num, bool ref = false) {
     uint32_t poolLength = pool.length(); if (poolLength < 4) return gstring();
@@ -69,9 +84,9 @@ public:
   /** Field, old value, new value. Might be used to maintain indexes. */
   typedef std::function<void(uint32_t, const gstring&, const gstring&)> ChangeVisitor;
 
-  SerializablePool() = default;
+  SerializablePoolTpl() = default;
   /** Copy the given pool bytes from the outside source (e.g. from the database). */
-  SerializablePool (const gstring& poolBytes): _impl (std::make_shared<Impl> (poolBytes)) {}
+  SerializablePoolTpl (const gstring& poolBytes): _impl (std::make_shared<Impl> (poolBytes)) {}
   /** Returns a view into the original serialized field (ignores the current changes).\n
    * Returns an empty string if the field is not in the pool (num > size).
    * @param ref Return a zero-copy view. The view becomes invalid after the value has been changed or when the pool's `Impl` is destroyed. */
@@ -157,7 +172,7 @@ public:
   /** True if a field has been `set` in this pool instance. */
   bool changed() const {return !_impl->_changed.empty();}
 
-  bool operator == (const SerializablePool& rhs) const {return _impl.get() == rhs._impl.get();}
+  bool operator == (const SerializablePoolTpl<PI>& rhs) const {return _impl.get() == rhs._impl.get();}
   /** Useful for storing SerializablePool in a map. */
   intptr_t implId() const {return (intptr_t) _impl.get();}
 
@@ -199,6 +214,10 @@ public:
   }
 #endif
 };
+
+using SerializablePool = SerializablePoolTpl<std::shared_ptr<SerializablePoolHelpers::Impl>>;
+using InlineSerializablePool = SerializablePoolTpl<SerializablePoolHelpers::InlinePtr>;
+
 }
 
 #endif // _GLIM_SERIALIZABLEPOOL_HPP_INCLUDED
