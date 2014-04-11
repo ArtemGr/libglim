@@ -24,13 +24,27 @@ namespace SerializablePoolHelpers {
     Impl (const gstring& poolBytes): _pool (poolBytes), _readOnly (false) {}
   };
 
-  /// Can be used instead of shared_ptr<Impl> to avoid the shared_ptr indirection when the SerializablePoolTpl isn't going to be copied.
+  /// Can be used to avoid a deep copy of the pool and change vectors (pImpl idiom).
+  struct SharedPtr {
+    std::shared_ptr<Impl> _impl;
+    SharedPtr() = default;
+    SharedPtr (const gstring& poolBytes): _impl (std::make_shared<Impl> (poolBytes)) {}
+    Impl* get() const {return _impl.get();}
+    Impl* operator->() const {return _impl.get();}
+    Impl& operator*() const {return *_impl;}
+    Impl* instance() {if (!_impl) _impl = std::make_shared<Impl>(); return _impl.get();}
+  };
+
+  /// Can be used instead of SharedPtr to avoid the shared_ptr indirection when the SerializablePoolTpl isn't going to be copied.
   /// Example: \code glim::InlineSerializablePool temporaryPool (bytes); \endcode
   struct InlinePtr {
     Impl _impl;
+    InlinePtr() = default;
+    InlinePtr (const gstring& poolBytes): _impl (poolBytes) {}
     Impl* get() const {return const_cast<Impl*> (&_impl);}
     Impl* operator->() const {return const_cast<Impl*> (&_impl);}
     Impl& operator*() const {return const_cast<Impl&> (_impl);}
+    Impl* instance() {return &_impl;}
   };
 }
 
@@ -86,7 +100,7 @@ public:
 
   SerializablePoolTpl() = default;
   /** Copy the given pool bytes from the outside source (e.g. from the database). */
-  SerializablePoolTpl (const gstring& poolBytes): _impl (std::make_shared<Impl> (poolBytes)) {}
+  SerializablePoolTpl (const gstring& poolBytes): _impl (poolBytes) {}
   /** Returns a view into the original serialized field (ignores the current changes).\n
    * Returns an empty string if the field is not in the pool (num > size).
    * @param ref Return a zero-copy view. The view becomes invalid after the value has been changed or when the pool's `Impl` is destroyed. */
@@ -107,17 +121,15 @@ public:
   }
   /** Set the new value of the field. */
   void set (uint32_t num, const gstring& value) {
-    Impl* impl = _impl.get();
-    if (!impl) impl = (_impl = std::make_shared<Impl>()).get();
-    else if (impl->_readOnly) throw std::runtime_error ("Attempt to modify a read-only SerializablePool");
+    Impl* impl = _impl.instance();
+    if (__builtin_expect (impl->_readOnly, 0)) throw std::runtime_error ("Attempt to modify a read-only SerializablePool");
     if (num >= impl->_changed.size()) {impl->_changed.resize (num + 1); impl->_changes.resize (num + 1);}
     impl->_changed[num] = true;
     impl->_changes[num] = value;
   }
   void reserve (uint32_t fields) {
-    Impl* impl = _impl.get();
-    if (!impl) impl = (_impl = std::make_shared<Impl>()).get();
-    else if (impl->_readOnly) throw std::runtime_error ("Attempt to modify a read-only SerializablePool");
+    Impl* impl = _impl.instance();
+    if (__builtin_expect (impl->_readOnly, 0)) throw std::runtime_error ("Attempt to modify a read-only SerializablePool");
     impl->_changed.reserve (fields);
     impl->_changes.reserve (fields);
   }
@@ -183,7 +195,7 @@ public:
 
   /** Number of elements in the pool. Equals to max(num)-1. */
   uint32_t size() const {
-    Impl* impl = _impl.get(); if (!impl) return 0;
+    Impl* impl = _impl.get(); if (__builtin_expect (!impl, 0)) return 0;
     return std::max (poolSize (impl->_pool), (uint32_t) impl->_changed.size());
   }
 
@@ -215,7 +227,7 @@ public:
 #endif
 };
 
-using SerializablePool = SerializablePoolTpl<std::shared_ptr<SerializablePoolHelpers::Impl>>;
+using SerializablePool = SerializablePoolTpl<SerializablePoolHelpers::SharedPtr>;
 using InlineSerializablePool = SerializablePoolTpl<SerializablePoolHelpers::InlinePtr>;
 
 }
