@@ -58,6 +58,8 @@ class Curl {
   bool _needs_cleanup:1; ///< ~Curl will do `curl_easy_cleanup` if `true`.
   char _errorBuf[CURL_ERROR_SIZE];
 
+  Curl (Curl&&) = default;
+
   /// @param cleanup can be turned off if the cURL is freed elsewhere.
   Curl (bool cleanup = true): _curl (curl_easy_init()), _headers (NULL), _sent (0), _needs_cleanup (cleanup) {
     curl_easy_setopt (_curl, CURLOPT_NOSIGNAL, 1L); // required per http://curl.haxx.se/libcurl/c/libcurl-tutorial.html#Multi-threading

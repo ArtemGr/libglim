@@ -1,8 +1,7 @@
 
 PREFIX = /usr/local
 INSTALL2 = ${PREFIX}/include/glim
-CXXFLAGS = -std=c++0x -Wall -O2 -ggdb
-CXXFLAGS += -I/usr/local/libevent/include -L/usr/local/libevent/lib
+CXXFLAGS = -std=c++11 -Wall -O2 -ggdb -DBOOST_ALL_DYN_LINK
 
 all: test
 
@@ -41,7 +40,7 @@ test_gstring: bin/test_gstring
 
 bin/test_runner: test_runner.cc runner.hpp curl.hpp
 	mkdir -p bin
-	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -levent -levent_pthreads -lcurl
+	g++ $(CXXFLAGS) test_runner.cc -o bin/test_runner -pthread -lboost_log -levent -levent_pthreads -lcurl
 
 test_runner: bin/test_runner
 	valgrind -q bin/test_runner

@@ -101,8 +101,7 @@ public:
    * @param ref If true then the `buf` can be passed by reference instead of being copied.
    *            This is useful for wrapping C string literals.
    */
-  explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length, bool ref = false) {
-    if (ref && free) GTHROW ("gstring: ref && free"); // Shared buffer must not be freed by gstring.
+  explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length, bool ref = false) noexcept {
     uint32_t power = 0; while (((uint32_t) 1 << (power + 1)) <= bufSize) ++power;
     _meta = ((uint32_t) free << FREE_OFFSET) |
             ((uint32_t) ref << REF_OFFSET) |
@@ -160,7 +159,7 @@ public:
       _meta = 0; _buf = nullptr;
     }
   }
-  gstring (gstring&& gstr): _meta (gstr._meta), _buf (gstr._buf) {
+  gstring (gstring&& gstr) noexcept: _meta (gstr._meta), _buf (gstr._buf) {
     gstr._meta = 0; gstr._buf = nullptr;
   }
   gstring& operator = (const gstring& gstr) {
@@ -188,7 +187,7 @@ public:
     }
     return *this;
   }
-  gstring& operator = (gstring&& gstr) {
+  gstring& operator = (gstring&& gstr) noexcept {
     assert (this != &gstr);
     if (_buf != nullptr && needsFreeing()) free (_buf);
     _meta = gstr._meta; _buf = gstr._buf;
@@ -199,15 +198,15 @@ public:
   gstring clone() const {return gstring (data(), length());}
   /** Returns a reference to the gstring: when the reference is copied the internal buffer is not copied but referenced (shallow copy).\n
    * This method should only be used if it is know that the life-time of the reference and its copies is less than the life-time of the buffer. */
-  gstring ref() const {return gstring (0, _buf, false, length(), true);}
+  gstring ref() const noexcept {return gstring (0, _buf, false, length(), true);}
 
-  bool needsFreeing() const {return _meta & FREE_FLAG;}
-  bool copiedByReference() const {return _meta & REF_FLAG;}
+  bool needsFreeing() const noexcept {return _meta & FREE_FLAG;}
+  bool copiedByReference() const noexcept {return _meta & REF_FLAG;}
   /** Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated. */
-  uint32_t capacity() const {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
-  uint32_t length() const {return _meta & LENGTH_MASK;}
-  size_t size() const {return _meta & LENGTH_MASK;}
-  bool empty() const {return (_meta & LENGTH_MASK) == 0;}
+  uint32_t capacity() const noexcept {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
+  uint32_t length() const noexcept {return _meta & LENGTH_MASK;}
+  size_t size() const noexcept {return _meta & LENGTH_MASK;}
+  bool empty() const noexcept {return (_meta & LENGTH_MASK) == 0;}
   std::string str() const {size_t len = size(); return len ? std::string ((const char*) _buf, len) : std::string();}
   /// NB: might move the string to a new buffer.
   const char* c_str() const {
@@ -217,7 +216,7 @@ public:
     if (cap < len + 1) const_cast<gstring*> (this) ->reserve (len + 1);
     char* buf = (char*) _buf; buf[len] = 0; return buf;
   }
-  bool equals (const char* cstr) const {
+  bool equals (const char* cstr) const noexcept {
     const char* cstr_; uint32_t clen_;
     if (cstr != nullptr) {cstr_ = cstr; clen_ = strlen (cstr);} else {cstr_ = ""; clen_ = 0;}
     const uint32_t len = length();
@@ -225,52 +224,52 @@ public:
     const char* gstr_ = _buf != nullptr ? (const char*) _buf : "";
     return memcmp (gstr_, cstr_, len) == 0;
   }
-  bool equals (const gstring& gs) const {
+  bool equals (const gstring& gs) const noexcept {
     uint32_t llen = length(), olen = gs.length();
     if (llen != olen) return false;
     return memcmp ((const char*) _buf, (const char*) gs._buf, llen) == 0;
   }
 
-  char& operator[] (unsigned index) {return ((char*)_buf)[index];}
-  const char& operator[] (unsigned index) const {return ((const char*)_buf)[index];}
+  char& operator[] (unsigned index) noexcept {return ((char*)_buf)[index];}
+  const char& operator[] (unsigned index) const noexcept {return ((const char*)_buf)[index];}
 
   /// Access `_buf` as `char*`. `_buf` might be nullptr.
-  char* data() {return (char*)_buf;}
-  const char* data() const {return (const char*)_buf;}
+  char* data() noexcept {return (char*)_buf;}
+  const char* data() const noexcept {return (const char*)_buf;}
 
-  char* endp() {return (char*)_buf + length();}
-  const char* endp() const {return (const char*)_buf + length();}
+  char* endp() noexcept {return (char*)_buf + length();}
+  const char* endp() const noexcept {return (const char*)_buf + length();}
 
-  gstring view (uint32_t pos, int32_t count = -1) {
+  gstring view (uint32_t pos, int32_t count = -1) noexcept {
     return gstring (0, data() + pos, false, count >= 0 ? count : length() - pos, copiedByReference());}
-  const gstring view (uint32_t pos, int32_t count = -1) const {
+  const gstring view (uint32_t pos, int32_t count = -1) const noexcept {
     return gstring (0, (void*)(data() + pos), false, count >= 0 ? count : length() - pos, copiedByReference());}
 
   // http://en.cppreference.com/w/cpp/concept/Iterator
   template<typename CT> struct iterator_t: public std::iterator<std::random_access_iterator_tag, CT, int32_t> {
     CT* _ptr;
-    iterator_t (): _ptr (nullptr) {}
-    iterator_t (CT* ptr): _ptr (ptr) {}
-    iterator_t (const iterator_t<CT>& it): _ptr (it._ptr) {}
+    iterator_t () noexcept: _ptr (nullptr) {}
+    iterator_t (CT* ptr) noexcept: _ptr (ptr) {}
+    iterator_t (const iterator_t<CT>& it) noexcept: _ptr (it._ptr) {}
 
-    CT& operator*() const {return *_ptr;}
-    CT* operator->() const {return _ptr;}
-    CT& operator[](int32_t ofs) const {return _ptr[ofs];}
+    CT& operator*() const noexcept {return *_ptr;}
+    CT* operator->() const noexcept {return _ptr;}
+    CT& operator[](int32_t ofs) const noexcept {return _ptr[ofs];}
 
-    iterator_t<CT>& operator++() {++_ptr; return *this;}
-    iterator_t<CT> operator++(int) {return iterator_t<CT> (_ptr++);};
-    iterator_t<CT>& operator--() {--_ptr; return *this;}
-    iterator_t<CT> operator--(int) {return iterator_t<CT> (_ptr--);};
-    bool operator == (const iterator_t<CT>& i2) const {return _ptr == i2._ptr;}
-    bool operator != (const iterator_t<CT>& i2) const {return _ptr != i2._ptr;}
-    bool operator < (const iterator_t<CT>& i2) const {return _ptr < i2._ptr;}
-    bool operator > (const iterator_t<CT>& i2) const {return _ptr > i2._ptr;}
-    bool operator <= (const iterator_t<CT>& i2) const {return _ptr <= i2._ptr;}
-    bool operator >= (const iterator_t<CT>& i2) const {return _ptr >= i2._ptr;}
-    iterator_t<CT> operator + (int32_t ofs) const {return iterator (_ptr + ofs);}
-    iterator_t<CT>& operator += (int32_t ofs) {_ptr += ofs; return *this;}
-    iterator_t<CT> operator - (int32_t ofs) const {return iterator (_ptr - ofs);}
-    iterator_t<CT>& operator -= (int32_t ofs) {_ptr -= ofs; return *this;}
+    iterator_t<CT>& operator++() noexcept {++_ptr; return *this;}
+    iterator_t<CT> operator++(int) noexcept {return iterator_t<CT> (_ptr++);};
+    iterator_t<CT>& operator--() noexcept {--_ptr; return *this;}
+    iterator_t<CT> operator--(int) noexcept {return iterator_t<CT> (_ptr--);};
+    bool operator == (const iterator_t<CT>& i2) const noexcept {return _ptr == i2._ptr;}
+    bool operator != (const iterator_t<CT>& i2) const noexcept {return _ptr != i2._ptr;}
+    bool operator < (const iterator_t<CT>& i2) const noexcept {return _ptr < i2._ptr;}
+    bool operator > (const iterator_t<CT>& i2) const noexcept {return _ptr > i2._ptr;}
+    bool operator <= (const iterator_t<CT>& i2) const noexcept {return _ptr <= i2._ptr;}
+    bool operator >= (const iterator_t<CT>& i2) const noexcept {return _ptr >= i2._ptr;}
+    iterator_t<CT> operator + (int32_t ofs) const noexcept {return iterator (_ptr + ofs);}
+    iterator_t<CT>& operator += (int32_t ofs) noexcept {_ptr += ofs; return *this;}
+    iterator_t<CT> operator - (int32_t ofs) const noexcept {return iterator (_ptr - ofs);}
+    iterator_t<CT>& operator -= (int32_t ofs) noexcept {_ptr -= ofs; return *this;}
   };
   // http://en.cppreference.com/w/cpp/concept/Container
   typedef char value_type;
@@ -280,15 +279,15 @@ public:
   typedef int32_t difference_type;
   typedef iterator_t<char> iterator;
   typedef iterator_t<const char> const_iterator;
-  iterator begin() {return iterator ((char*) _buf);}
-  const_iterator begin() const {return const_iterator ((char*) _buf);}
-  iterator end() {return iterator ((char*) _buf + size());}
-  const_iterator end() const {return const_iterator ((char*) _buf + size());}
-  const_iterator cbegin() const {return const_iterator ((char*) _buf);}
-  const_iterator cend() const {return const_iterator ((char*) _buf + size());}
+  iterator begin() noexcept {return iterator ((char*) _buf);}
+  const_iterator begin() const noexcept {return const_iterator ((char*) _buf);}
+  iterator end() noexcept {return iterator ((char*) _buf + size());}
+  const_iterator end() const noexcept {return const_iterator ((char*) _buf + size());}
+  const_iterator cbegin() const noexcept {return const_iterator ((char*) _buf);}
+  const_iterator cend() const noexcept {return const_iterator ((char*) _buf + size());}
 
   /** Returns -1 if not found. */
-  int32_t find (const char* str, int32_t pos, int32_t count) const {
+  int32_t find (const char* str, int32_t pos, int32_t count) const noexcept {
     const int32_t hlen = (int32_t) length() - pos;
     if (hlen <= 0) return -1;
     char* haystack = (char*) _buf + pos;
@@ -296,16 +295,16 @@ public:
     if (mret == 0) return -1;
     return (char*) mret - (char*) _buf;
   }
-  int32_t find (const char* str, int32_t pos = 0) const {return find (str, pos, strlen (str));}
+  int32_t find (const char* str, int32_t pos = 0) const noexcept {return find (str, pos, strlen (str));}
 
   /** Index of `ch` inside the string or -1 if not found. */
-  int32_t indexOf (char ch) const {
+  int32_t indexOf (char ch) const noexcept {
     void* ret = memchr (_buf, ch, size());
     return ret == nullptr ? -1 : (char*) ret - (char*) _buf;
   }
 
   // Helps to workaround the "statement has no effect" warning in `GSTRING_ON_STACK`.
-  gstring& self() {return *this;}
+  gstring& self() noexcept {return *this;}
 
   /** Grow buffer to be at least `to` characters long. */
   void reserve (uint32_t to) {
@@ -332,7 +331,7 @@ public:
   }
 
   /** Length setter. Useful when you manually write into the buffer or to cut the string. */
-  void length (uint32_t len) {
+  void length (uint32_t len) noexcept {
     _meta = (_meta & ~LENGTH_MASK) | (len & LENGTH_MASK);
   }
 
@@ -381,7 +380,7 @@ public:
     return *this;
   }
 
-  bool operator < (const gstring &gs) const {
+  bool operator < (const gstring &gs) const noexcept {
     uint32_t len1 = length(); uint32_t len2 = gs.length();
     if (len1 == len2) return ::strncmp (data(), gs.data(), len1) < 0;
     int cmp = ::strncmp (data(), gs.data(), std::min (len1, len2));
@@ -461,10 +460,10 @@ public:
   }
 
   /// Set length to 0. `_buf` not changed.
-  gstring& clear() {length (0); return *this;}
+  gstring& clear() noexcept {length (0); return *this;}
 
   /// Removes `count` characters starting at `pos`.
-  gstring& erase (uint32_t pos, uint32_t count = 1) {
+  gstring& erase (uint32_t pos, uint32_t count = 1) noexcept {
     const char* buf = (const char*) _buf;
     const char* pt1 = buf + pos;
     const char* pt2 = pt1 + count;
@@ -478,29 +477,29 @@ public:
   }
   /// Remove characters [from,till) and return `from`.\n
   /// Compatible with "boost/algorithm/string/trim.hpp".
-  iterator_t<char> erase (iterator_t<char> from, iterator_t<char> till) {
+  iterator_t<char> erase (iterator_t<char> from, iterator_t<char> till) noexcept {
     intptr_t ipos = from._ptr - (char*) _buf;
     intptr_t count = till._ptr - from._ptr;
     if (ipos >= 0 && count > 0) erase (ipos, count);
     return from;
   }
 
-  ~gstring() {
+  ~gstring() noexcept {
     if (_buf != nullptr && needsFreeing()) {::free (_buf); _buf = nullptr;}
   }
 };
 
-inline bool operator == (const gstring& gs1, const gstring& gs2) {return gs1.equals (gs2);}
-inline bool operator == (const char* cstr, const gstring& gstr) {return gstr.equals (cstr);}
-inline bool operator == (const gstring& gstr, const char* cstr) {return gstr.equals (cstr);}
-inline bool operator != (const gstring& gs1, const gstring& gs2) {return !gs1.equals (gs2);}
-inline bool operator != (const char* cstr, const gstring& gstr) {return !gstr.equals (cstr);}
-inline bool operator != (const gstring& gstr, const char* cstr) {return !gstr.equals (cstr);}
+inline bool operator == (const gstring& gs1, const gstring& gs2) noexcept {return gs1.equals (gs2);}
+inline bool operator == (const char* cstr, const gstring& gstr) noexcept {return gstr.equals (cstr);}
+inline bool operator == (const gstring& gstr, const char* cstr) noexcept {return gstr.equals (cstr);}
+inline bool operator != (const gstring& gs1, const gstring& gs2) noexcept {return !gs1.equals (gs2);}
+inline bool operator != (const char* cstr, const gstring& gstr) noexcept {return !gstr.equals (cstr);}
+inline bool operator != (const gstring& gstr, const char* cstr) noexcept {return !gstr.equals (cstr);}
 
-inline bool operator == (const gstring& gstr, const std::string& str) {return gstr.equals (gstring (0, (void*) str.data(), false, str.size()));}
-inline bool operator != (const gstring& gstr, const std::string& str) {return !(gstr == str);}
-inline bool operator == (const std::string& str, const gstring& gstr) {return gstr == str;}
-inline bool operator != (const std::string& str, const gstring& gstr) {return !(gstr == str);}
+inline bool operator == (const gstring& gstr, const std::string& str) noexcept {return gstr.equals (gstring (0, (void*) str.data(), false, str.size()));}
+inline bool operator != (const gstring& gstr, const std::string& str) noexcept {return !(gstr == str);}
+inline bool operator == (const std::string& str, const gstring& gstr) noexcept {return gstr == str;}
+inline bool operator != (const std::string& str, const gstring& gstr) noexcept {return !(gstr == str);}
 inline std::string operator += (std::string& str, const gstring& gstr) {return str.append (gstr.data(), gstr.size());}
 inline std::string operator + (const std::string& str, const gstring& gstr) {return std::string (str) .append (gstr.data(), gstr.size());}
 
@@ -521,7 +520,7 @@ inline std::ostream& gstring::writeAsNetstring (std::ostream& stream) const {
 class gstring_stream: public std::basic_streambuf<char, std::char_traits<char> > {
   gstring& _gstr;
 public:
-  gstring_stream (gstring& gstr): _gstr (gstr) {
+  gstring_stream (gstring& gstr) noexcept: _gstr (gstr) {
     char* buf = (char*) gstr._buf;
     if (buf != nullptr) setg (buf, buf, buf + gstr.length());
   }
@@ -541,7 +540,7 @@ protected:
 // cf. http://stackoverflow.com/questions/8157937/how-to-specialize-stdhashkeyoperator-for-user-defined-type-in-unordered
 namespace std {
   template <> struct hash<glim::gstring> {
-    size_t operator()(const glim::gstring& gs) const {
+    size_t operator()(const glim::gstring& gs) const noexcept {
       // cf. http://stackoverflow.com/questions/7666509/hash-function-for-string
       // Would be nice to use https://131002.net/siphash/ here.
       uint32_t hash = 5381;
