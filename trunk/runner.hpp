@@ -1,27 +1,142 @@
 #ifndef _GLIM_RUNNER_INCLUDED
 #define _GLIM_RUNNER_INCLUDED
 
-#include <functional>
-#include <mutex>
+#include <algorithm>  // min
+#include <atomic>
 #include <condition_variable>
 #include <chrono>
-#include <unordered_map>
-#include <stdexcept>
+#include <functional>
+#include <mutex>
 #include <memory>
-#include <algorithm> // min
+#include <stdexcept>
+#include <thread>
+#include <unordered_map>
 
 #include <curl/curl.h>
 #include <event2/event.h> // cf. hiperfifo.cpp at http://article.gmane.org/gmane.comp.web.curl.library/37752
 
+#include <boost/intrusive_ptr.hpp>
+#include <boost/lockfree/queue.hpp>  // http://www.boost.org/doc/libs/1_53_0/doc/html/boost/lockfree/queue.html
+#include <boost/log/trivial.hpp>
+
 #include <time.h>
 #include <stdlib.h>  // rand
+#include <sys/eventfd.h>
 
 #include "gstring.hpp"
 #include "exception.hpp"
 
 namespace glim {
 
-// TODO: Make sure that all cURL methods are called from a single thread in order to avoid the hard-to-debug errors.
+/// Listens to messages returned by `curl_multi_info_read`.
+/// NB: When CURL is queued with `addToCURLM` the CURL's `CURLOPT_PRIVATE` must point to the instance of `CurlmInformationListener`.
+struct CurlmInformationListener {
+  enum FreeOptions {REMOVE_CURL_FROM_CURLM = 1, CURL_CLEANUP = 2, DELETE_LISTENER = 4, REMOVE_CLEAN_DELETE = 1|2|4};
+  virtual FreeOptions information (CURLMsg*, CURLM*) = 0;
+  virtual ~CurlmInformationListener() {}
+};
+
+/// Listener deferring to a lambda.
+struct FunCurlmLisneter: public glim::CurlmInformationListener {
+  std::function <void(CURLMsg*, CURLM*)> _fun;
+  FunCurlmLisneter (std::function <void(CURLMsg*, CURLM*)>&& fun): _fun (std::move (fun)) {}
+  virtual FreeOptions information (CURLMsg* msg, CURLM* curlm) override {
+    if (__builtin_expect ((bool) _fun, 1))
+      try {_fun (msg, curlm);} catch (const std::exception& ex) {BOOST_LOG_TRIVIAL (error) << "FunCurlmLisneter] " << ex.what();}
+    return static_cast<FreeOptions> (REMOVE_CURL_FROM_CURLM | DELETE_LISTENER);
+  }
+};
+
+/// Running cURL jobs in a single thread.
+class RunnerV2 {
+  std::atomic_int_fast32_t _references {0};  // For intrusive_ptr.
+  CURLM* _multi = nullptr;  ///< Initialized in `run`. Should not be used outside of it.
+  int _eventFd = 0;  ///< Used to give the `curl_multi_wait` some work when there's no cURL descriptors and to wake it from `withCURLM`.
+  boost::lockfree::queue<CURL*, boost::lockfree::capacity<16>> _queue;  ///< `CURL` handles waiting to be added to `CURL_MULTI`.
+  std::thread _thread;
+  volatile bool _exit = false;
+
+  friend inline void intrusive_ptr_add_ref (RunnerV2*);
+  friend inline void intrusive_ptr_release (RunnerV2*);
+
+  void run() noexcept try {
+    pthread_setname_np (pthread_self(), "Runner");
+    _multi = curl_multi_init(); if (__builtin_expect (_multi == nullptr, 0)) GTHROW ("!curl_multi_init");
+    _eventFd = eventfd (0, EFD_CLOEXEC | EFD_NONBLOCK);  // Used to pause `curl_multi_wait` when there's no other jobs.
+    if (__builtin_expect (_eventFd == -1, 0)) GTHROW (std::string ("eventfd: ") + ::strerror (errno));
+    while (__builtin_expect (!_exit, 0)) {
+      // Reset the CURL_EVENT_FD value to 0, so that the `curl_multi_wait` can sleep.
+      if (__builtin_expect (_eventFd > 0, 1)) {eventfd_t count = 0; eventfd_read (_eventFd, &count);}
+
+      // Add the queued CURL handles to our CURLM.
+      CURL* easy = nullptr; while (_queue.pop (easy)) curl_multi_add_handle (_multi, easy);
+
+      // Run the cURL.
+      int runningHandles = 0;
+      CURLMcode rc = curl_multi_perform (_multi, &runningHandles);  // http://curl.haxx.se/libcurl/c/curl_multi_perform.html
+      if (__builtin_expect (rc != CURLM_OK, 0)) BOOST_LOG_TRIVIAL (error) << "Runner] curl_multi_perform: " << curl_multi_strerror (rc);
+
+      // Process the finished handles.
+      for (;;) {
+        int messagesLeft = 0; CURLMsg* msg = curl_multi_info_read (_multi, &messagesLeft); if (msg) try {
+          CURL* curl = msg->easy_handle; CurlmInformationListener* listener = 0;
+          if (__builtin_expect (curl_easy_getinfo (curl, CURLINFO_PRIVATE, &listener) == CURLE_OK, 1)) {
+            using FOP = CurlmInformationListener::FreeOptions;
+            FOP fop = listener->information (msg, _multi);
+            if (fop & FOP::REMOVE_CURL_FROM_CURLM) curl_multi_remove_handle (_multi, curl);
+            if (fop & FOP::CURL_CLEANUP) curl_easy_cleanup (curl);
+            if (fop & FOP::DELETE_LISTENER) delete listener;
+          } else {
+            curl_multi_remove_handle (_multi, curl);
+            curl_easy_cleanup (curl);
+          }
+        } catch (const std::exception& ex) {BOOST_LOG_TRIVIAL (error) << "Runner] " << ex.what();}
+        if (messagesLeft == 0) break;
+      }
+
+      // Wait on the cURL file descriptors.
+      int descriptors = 0;
+      curl_waitfd waitfd = {_eventFd, CURL_WAIT_POLLIN, 0};
+      //eventfd_t eValue = 0; eventfd_read (curlEventFd, &eValue);  // Reset the curlEventFd value to zero.
+      rc = curl_multi_wait (_multi, &waitfd, 1, 1000, &descriptors);  // http://curl.haxx.se/libcurl/c/curl_multi_wait.html
+      if (__builtin_expect (rc != CURLM_OK, 0)) BOOST_LOG_TRIVIAL (error) << "Runner] curl_multi_wait: " << curl_multi_strerror (rc);
+    }
+  } catch (const std::exception& ex) {BOOST_LOG_TRIVIAL (error) << "Runner] " << ex.what();}
+public:
+  RunnerV2() {
+    // Start a thread using CURLM in a thread-safe way (that is, from this single thread only).
+    // NB: All CURL operations should run on the same thread. Even the creation of easy handles should run here.
+    _thread = std::thread (&RunnerV2::run, this);
+  }
+  ~RunnerV2() {
+    _exit = true;
+    _thread.detach();
+  }
+
+  /// A singletone instance of the Runner used in order for different programes to reuse the same cURL thread.
+  static boost::intrusive_ptr<RunnerV2>& instance() {
+    static boost::intrusive_ptr<RunnerV2> INSTANCE (new RunnerV2());
+    return INSTANCE;
+  }
+
+  /// Schedule a CURL handler to be executed in the cURL thread.
+  /// NB: If the handle have a `CURLOPT_PRIVATE` option then it MUST point to an instance of `CurlmInformationListener`.
+  void addToCURLM (CURL* easyHandle) {
+    if (__builtin_expect (!_queue.push (easyHandle), 0)) GTHROW ("Can't push CURL* into the queue.");
+    if (__builtin_expect (_eventFd > 0, 1)) eventfd_write (_eventFd, 1);  // Will wake the `curl_multi_wait` up, in order to run the `curl_multi_add_handle`.
+  }
+
+  /// Schedule a CURL handler to be executed in the cURL thread.
+  /// NB: `CURLOPT_PRIVATE` is overwritten with a pointer to `FunCurlmLisneter`.
+  void addToCURLM (CURL* easyHandle, std::function <void(CURLMsg*, CURLM*)>&& listener) {
+    FunCurlmLisneter* funListener = new FunCurlmLisneter (std::move (listener));  // Will be deleted by the Runner.
+    curl_easy_setopt (easyHandle, CURLOPT_PRIVATE, funListener);  // Tells `addToCURLM` to call this listener later.
+    addToCURLM (easyHandle);
+  }
+};
+
+inline void intrusive_ptr_add_ref (RunnerV2* runner) {++ runner->_references;}
+inline void intrusive_ptr_release (RunnerV2* runner) {if (-- runner->_references == 0) delete runner;}
 
 /// Run CURLM requests and completion handlers, as well as other periodic jobs.
 class Runner {
