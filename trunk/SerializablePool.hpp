@@ -25,6 +25,7 @@ namespace SerializablePoolHelpers {
   };
 
   /// Can be used to avoid a deep copy of the pool and change vectors (pImpl idiom).
+  /// Example: \code glim::SerializablePool pool; \endcode
   struct SharedPtr {
     std::shared_ptr<Impl> _impl;
     SharedPtr() = default;
