@@ -52,7 +52,7 @@ class RunnerV2 {
   std::atomic_int_fast32_t _references {0};  // For intrusive_ptr.
   CURLM* _multi = nullptr;  ///< Initialized in `run`. Should not be used outside of it.
   int _eventFd = 0;  ///< Used to give the `curl_multi_wait` some work when there's no cURL descriptors and to wake it from `withCURLM`.
-  boost::lockfree::queue<CURL*, boost::lockfree::capacity<16>> _queue;  ///< `CURL` handles waiting to be added to `CURL_MULTI`.
+  boost::lockfree::queue<CURL*, boost::lockfree::capacity<64>> _queue;  ///< `CURL` handles waiting to be added to `CURL_MULTI`.
   std::thread _thread;
   volatile bool _exit = false;
 
@@ -97,15 +97,15 @@ class RunnerV2 {
       // Wait on the cURL file descriptors.
       int descriptors = 0;
       curl_waitfd waitfd = {_eventFd, CURL_WAIT_POLLIN, 0};
-      //eventfd_t eValue = 0; eventfd_read (curlEventFd, &eValue);  // Reset the curlEventFd value to zero.
-      rc = curl_multi_wait (_multi, &waitfd, 1, 1000, &descriptors);  // http://curl.haxx.se/libcurl/c/curl_multi_wait.html
+      eventfd_t eValue = 0; eventfd_read (_eventFd, &eValue);  // Reset the curlEventFd value to zero.
+      rc = curl_multi_wait (_multi, &waitfd, 1, 100, &descriptors);  // http://curl.haxx.se/libcurl/c/curl_multi_wait.html
       if (__builtin_expect (rc != CURLM_OK, 0)) BOOST_LOG_TRIVIAL (error) << "Runner] curl_multi_wait: " << curl_multi_strerror (rc);
     }
   } catch (const std::exception& ex) {BOOST_LOG_TRIVIAL (error) << "Runner] " << ex.what();}
 public:
   RunnerV2() {
     // Start a thread using CURLM in a thread-safe way (that is, from this single thread only).
-    // NB: All CURL operations should run on the same thread. Even the creation of easy handles should run here.
+    // NB: Handles *can* be passed between threads: http://article.gmane.org/gmane.comp.web.curl.library/33188
     _thread = std::thread (&RunnerV2::run, this);
   }
   ~RunnerV2() {
