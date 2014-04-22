@@ -206,14 +206,16 @@ class Curl {
      if (curl->status() != 200) std::cerr << "cURL status != 200; debug follows: " << *curlDebug << std::endl;
    \endcode
    See http://curl.haxx.se/libcurl/c/curl_easy_setopt.html#CURLOPTDEBUGFUNCTION
+   @param listener The receiver of the debug information.
+   @param data Whether to pass the data (`CURLINFO_DATA_IN`, `CURLINFO_DATA_OUT`) to the `listener`.
   */
-  Curl& debugListenerF (std::function<void (const char* bytes, size_t size)> listener) {
-    return debugListener ([listener/* = std::move (listener)*/] (curl_infotype type, char* bytes, size_t size) {
+  Curl& debugListenerF (std::function<void (const char* bytes, size_t size)> listener, bool data = false) {
+    return debugListener ([listener/* = std::move (listener)*/,data] (curl_infotype type, char* bytes, size_t size) {
       GSTRING_ON_STACK (buf, 256);
       auto prepend = [&](const char* prefix) {
         buf << prefix; for (char *p = bytes, *end = bytes + size; p < end; ++p) {buf << *p; if (*p == '\n' && p + 2 < end) buf << prefix;}};
-      if (type == CURLINFO_HEADER_IN || type == CURLINFO_DATA_IN) prepend ("< ");
-      else if (type == CURLINFO_HEADER_OUT || type == CURLINFO_DATA_OUT) prepend ("> ");
+      if (type == CURLINFO_HEADER_IN || (type == CURLINFO_DATA_IN && data)) prepend ("< ");
+      else if (type == CURLINFO_HEADER_OUT || (type == CURLINFO_DATA_OUT && data)) prepend ("> ");
       listener (buf.c_str(), buf.size());
     });
   }
