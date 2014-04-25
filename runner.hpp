@@ -39,11 +39,12 @@ struct CurlmInformationListener {
 /// Listener deferring to a lambda.
 struct FunCurlmLisneter: public glim::CurlmInformationListener {
   std::function <void(CURLMsg*, CURLM*)> _fun;
-  FunCurlmLisneter (std::function <void(CURLMsg*, CURLM*)>&& fun): _fun (std::move (fun)) {}
+  FreeOptions _freeOptions;
+  FunCurlmLisneter (std::function <void(CURLMsg*, CURLM*)>&& fun, FreeOptions freeOptions): _fun (std::move (fun)), _freeOptions (freeOptions) {}
   virtual FreeOptions information (CURLMsg* msg, CURLM* curlm) override {
     if (__builtin_expect ((bool) _fun, 1))
       try {_fun (msg, curlm);} catch (const std::exception& ex) {BOOST_LOG_TRIVIAL (error) << "FunCurlmLisneter] " << ex.what();}
-    return static_cast<FreeOptions> (REMOVE_CURL_FROM_CURLM | DELETE_LISTENER);
+    return _freeOptions;
   }
 };
 
@@ -55,6 +56,8 @@ class RunnerV2 {
   boost::lockfree::queue<CURL*, boost::lockfree::capacity<64>> _queue;  ///< `CURL` handles waiting to be added to `CURL_MULTI`.
   std::thread _thread;
   volatile bool _exit = false;
+
+  using FreeOptions = CurlmInformationListener::FreeOptions;
 
   friend inline void intrusive_ptr_add_ref (RunnerV2*);
   friend inline void intrusive_ptr_release (RunnerV2*);
@@ -128,8 +131,9 @@ public:
 
   /// Schedule a CURL handler to be executed in the cURL thread.
   /// NB: `CURLOPT_PRIVATE` is overwritten with a pointer to `FunCurlmLisneter`.
-  void addToCURLM (CURL* easyHandle, std::function <void(CURLMsg*, CURLM*)>&& listener) {
-    FunCurlmLisneter* funListener = new FunCurlmLisneter (std::move (listener));  // Will be deleted by the Runner.
+  void addToCURLM (CURL* easyHandle, std::function <void(CURLMsg*, CURLM*)>&& listener,
+      FreeOptions freeOptions = static_cast<FreeOptions> (FreeOptions::REMOVE_CURL_FROM_CURLM | FreeOptions::DELETE_LISTENER)) {
+    FunCurlmLisneter* funListener = new FunCurlmLisneter (std::move (listener), freeOptions);  // Will be deleted by the Runner.
     curl_easy_setopt (easyHandle, CURLOPT_PRIVATE, funListener);  // Tells `addToCURLM` to call this listener later.
     addToCURLM (easyHandle);
   }
