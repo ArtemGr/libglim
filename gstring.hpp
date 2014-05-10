@@ -526,8 +526,8 @@ public:
   }
 protected:
   virtual int_type overflow (int_type ch) {
-    if (ch != traits_type::eof()) _gstr.append ((char) ch);
-    return ch;
+    if (__builtin_expect (ch != traits_type::eof(), 1)) _gstr.append ((char) ch);
+    return 0;
   }
   // no copying
   gstring_stream (const gstring_stream &);
