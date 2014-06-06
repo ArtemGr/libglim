@@ -35,7 +35,7 @@ limitations under the License.
 #include "exception.hpp"
 
 /// Make a read-only gstring from a C string: `const gstring foo = C2GSTRING("foo")`.
-#define C2GSTRING(CSTR) ::glim::gstring (0, (void*) CSTR, false, sizeof (CSTR) - 1, true)
+#define C2GSTRING(CSTR) ::glim::gstring (::glim::gstring::ReferenceConstructor(), CSTR, sizeof (CSTR) - 1, true)
 /// Usage: GSTRING_ON_STACK (buf, 64) << "foo" << "bar";
 #define GSTRING_ON_STACK(NAME, SIZE) char NAME##Buf[SIZE]; ::glim::gstring NAME (SIZE, NAME##Buf, false, 0); NAME.self()
 
@@ -91,14 +91,13 @@ public:
 public:
   gstring(): _meta (0), _buf (nullptr) {}
   /**
-   * Reuse `buf` of size `size`.
-   * To fully use `buf` the `size` should be the power of two.
+   * Reuse `buf` of size `bufSize`.
+   * To fully use `buf` the `bufSize` should be the power of two.
    * @param bufSize The size of the memory allocated to `buf`.
    * @param buf The memory region to be reused.
    * @param free Whether the `buf` should be `free`d on resize or gstring destruction.
-   * @param readOnly Whether the `buf` is read-only and should not be written to.
    * @param length String length inside the `buf`.
-   * @param ref If true then the `buf` can be passed by reference instead of being copied.
+   * @param ref If true then the `buf` isn't copied by gstring's copy constructors.
    *            This is useful for wrapping C string literals.
    */
   explicit gstring (uint32_t bufSize, void* buf, bool free, uint32_t length, bool ref = false) noexcept {
@@ -109,6 +108,17 @@ public:
             (length & LENGTH_MASK);
     _buf = buf;
   }
+
+  struct ReferenceConstructor {};
+  /**
+   * Make a view to the given cstring.
+   * @param buf The memory region to be reused.
+   * @param length String length inside the `buf`.
+   * @param ref If true then the `buf` isn't copied by gstring's copy constructors.
+   *            This is useful for wrapping C string literals.
+   */
+  explicit constexpr gstring (ReferenceConstructor, const char* buf, uint32_t length, bool ref = false) noexcept:
+    _meta (((uint32_t) ref << REF_OFFSET) | (length & LENGTH_MASK)), _buf ((void*) buf) {}
 
   /** Copy the characters into `gstring`. */
   gstring (const char* chars): _meta (0), _buf (nullptr) {
