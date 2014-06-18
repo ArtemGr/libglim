@@ -38,7 +38,7 @@ struct hgot {
   /// A gstring *view* into the `body`.
   glim::gstring gbody() {
     if (!body) return glim::gstring();
-    return glim::gstring (0, evbuffer_pullup (body, -1), false, evbuffer_get_length (body));}
+    return glim::gstring (glim::gstring::ReferenceConstructor(), (const char*) evbuffer_pullup (body, -1), evbuffer_get_length (body));}
 };
 
 /// Used internally to pass both connection and handler into callback.
