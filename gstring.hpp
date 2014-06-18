@@ -89,7 +89,7 @@ class gstring {
 public:
   void* _buf;
 public:
-  gstring(): _meta (0), _buf (nullptr) {}
+  constexpr gstring() noexcept: _meta (0), _buf (nullptr) {}
   /**
    * Reuse `buf` of size `bufSize`.
    * To fully use `buf` the `bufSize` should be the power of two.
@@ -110,17 +110,15 @@ public:
   }
 
   struct ReferenceConstructor {};
-  /**
-   * Make a view to the given cstring.
-   * @param buf The memory region to be reused.
-   * @param length String length inside the `buf`.
-   * @param ref If true then the `buf` isn't copied by gstring's copy constructors.
-   *            This is useful for wrapping C string literals.
-   */
+  /// Make a view to the given cstring.
+  /// @param buf The memory region to be reused.
+  /// @param length String length inside the `buf`.
+  /// @param ref If true then the `buf` isn't copied by gstring's copy constructors.
+  ///            This is useful for wrapping C string literals.
   explicit constexpr gstring (ReferenceConstructor, const char* buf, uint32_t length, bool ref = false) noexcept:
     _meta (((uint32_t) ref << REF_OFFSET) | (length & LENGTH_MASK)), _buf ((void*) buf) {}
 
-  /** Copy the characters into `gstring`. */
+  /// Copy the characters into `gstring`.
   gstring (const char* chars): _meta (0), _buf (nullptr) {
     if (chars && *chars) {
       size_t length = ::strlen (chars);
@@ -131,7 +129,7 @@ public:
     }
   }
 
-  /** Copy the characters into `gstring`. */
+  /// Copy the characters into `gstring`.
   gstring (const char* chars, size_t length) {
     if (length != 0) {
       _buf = ::malloc (length);
@@ -141,7 +139,7 @@ public:
             (length & LENGTH_MASK);
   }
 
-  /** Copy into `gstring`. */
+  /// Copy into `gstring`.
   gstring (const std::string& str): _meta (0), _buf (nullptr) {
     if (!str.empty()) {
       _buf = ::malloc (str.length());
@@ -151,8 +149,8 @@ public:
     }
   }
 
-  /** If `gstr` is `copiedByReference` then make a shallow copy of it,
-   * otherwise copy `gstr` contents into a `malloc`ed buffer. */
+  /// If `gstr` is `copiedByReference` then make a shallow copy of it,
+  /// otherwise copy `gstr` contents into a `malloc`ed buffer.
   gstring (const gstring& gstr) {
     uint32_t glen = gstr.length();
     if (glen != 0) {
@@ -212,7 +210,7 @@ public:
 
   bool needsFreeing() const noexcept {return _meta & FREE_FLAG;}
   bool copiedByReference() const noexcept {return _meta & REF_FLAG;}
-  /** Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated. */
+  /// Current buffer capacity (memory allocated to the string). Returns 1 if no memory allocated.
   uint32_t capacity() const noexcept {return 1 << ((_meta & CAPACITY_MASK) >> CAPACITY_OFFSET);}
   uint32_t length() const noexcept {return _meta & LENGTH_MASK;}
   size_t size() const noexcept {return _meta & LENGTH_MASK;}
@@ -449,6 +447,13 @@ public:
     if (next > len) GTHROW ("gstring: intAt: endptr > len");
     if (after) *after = next;
     return lv;
+  }
+
+  /// Wrapper around strtol. Copies the string into a temporary buffer in order to pass it to strtol. Empty string returns 0.
+  long toInt (int base = 10) const noexcept {
+    const uint32_t len = length(); if (len == 0) return 0;
+    char buf[len + 1]; memcpy (buf, _buf, len); buf[len] = 0;
+    return ::strtol (buf, nullptr, base);
   }
 
   /// Get a single netstring from the `stream` and append it to the end of `gstring`.

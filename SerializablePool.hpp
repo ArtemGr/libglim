@@ -11,8 +11,8 @@ namespace SerializablePoolHelpers {
   struct Impl {
     /**
      * Pool format: \code
-     * uint32_t valuesStart; // Network byte order.
-     * uint32_t value0Offset, value1Offset, ... valueNOffset; // Network byte order.
+     * uint32_t valuesStart;  // Network byte order.
+     * uint32_t value0Offset, value1Offset, ... valueNOffset;  // Network byte order.
      * char value0[]; char zero; char value1[]; char zero; ... char valueN[]; char zero;
      * \endcode
      */
