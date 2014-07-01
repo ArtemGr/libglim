@@ -203,7 +203,11 @@ public:
     return *this;
   }
 
+  /// Return a copy of the string.
   gstring clone() const {return gstring (data(), length());}
+  /// If the gstring's buffer is not owned then copy the bytes into the owned one.
+  /// Useful for turning a stack-allocated gstring into a heap-allocated gstring.
+  gstring& owned() {if (!needsFreeing()) *this = gstring (data(), length()); return *this;}
   /** Returns a reference to the gstring: when the reference is copied the internal buffer is not copied but referenced (shallow copy).\n
    * This method should only be used if it is know that the life-time of the reference and its copies is less than the life-time of the buffer. */
   gstring ref() const noexcept {return gstring (0, _buf, false, length(), true);}
