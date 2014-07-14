@@ -1,7 +1,7 @@
 
 PREFIX = /usr/local
 INSTALL2 = ${PREFIX}/include/glim
-CXXFLAGS = -std=c++11 -Wall -O2 -ggdb -DBOOST_ALL_DYN_LINK
+CXXFLAGS = -std=c++1y -Wall -O2 -ggdb -DBOOST_ALL_DYN_LINK
 
 all: test
 
