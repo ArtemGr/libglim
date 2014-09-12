@@ -515,7 +515,8 @@ inline bool operator != (const gstring& gs1, const gstring& gs2) noexcept {retur
 inline bool operator != (const char* cstr, const gstring& gstr) noexcept {return !gstr.equals (cstr);}
 inline bool operator != (const gstring& gstr, const char* cstr) noexcept {return !gstr.equals (cstr);}
 
-inline bool operator == (const gstring& gstr, const std::string& str) noexcept {return gstr.equals (gstring (0, (void*) str.data(), false, str.size()));}
+inline bool operator == (const gstring& gstr, const std::string& str) noexcept {
+  return gstr.equals (gstring (gstring::ReferenceConstructor(), str.data(), str.size()));}
 inline bool operator != (const gstring& gstr, const std::string& str) noexcept {return !(gstr == str);}
 inline bool operator == (const std::string& str, const gstring& gstr) noexcept {return gstr == str;}
 inline bool operator != (const std::string& str, const gstring& gstr) noexcept {return !(gstr == str);}
