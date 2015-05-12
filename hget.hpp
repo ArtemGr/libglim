@@ -135,6 +135,7 @@ class hget {
       size_t getLen = strlen (get);
       size_t qsLen = strlen (qs);
       char buf[getLen + 1 + qsLen + 1];
+      buf[0] = 0;
       char* caret = stpcpy (buf, get);
       *caret++ = '?';
       caret = stpcpy (caret, qs);
