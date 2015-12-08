@@ -557,7 +557,7 @@ protected:
 /// Parse and return a netstring at `pos`.\n
 /// Throws std::runtime_error if netstring parsing fails.\n
 /// If parsing was successfull, then `after` is set to point after the parsed netstring.
-std::string netstringAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr) {
+inline std::string netstringAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr) {
   const uint32_t len = source.size(); char* buf = (char*) source.data();
   uint32_t next = pos;
   while (next < len && buf[next] >= '0' && buf[next] <= '9') ++next;
@@ -572,7 +572,7 @@ std::string netstringAt (const std::string& source, uint32_t pos, uint32_t* afte
 }
 
 /// Wrapper around strtol.
-long intAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr, int base = 10) {
+inline long intAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr, int base = 10) {
   // BTW: http://www.kumobius.com/2013/08/c-string-to-int/
   const uint32_t len = source.size(); char* buf = (char*) source.c_str();
   if (pos >= len || buf == nullptr) GTHROW ("intAt: pos >= len");
@@ -582,6 +582,16 @@ long intAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr, 
   if (next > len) GTHROW ("intAt: endptr > len");
   if (after) *after = next;
   return lv;
+}
+
+/// `string`-based alternative to `gstring`'s `appendNetstring`.
+inline void writeNetstring (std::ostringstream& oss, const char* cstr, uint32_t clen) {
+  oss << (int) clen; oss.put (':'); oss.write (cstr, clen); oss.put (',');
+}
+
+/// `string`-based alternative to `gstring`'s `appendNetstring`.
+inline void writeNetstring (std::ostringstream& oss, const std::string& payload) {
+  writeNetstring (oss, payload.data(), payload.size());
 }
 
 } // namespace glim
