@@ -554,6 +554,36 @@ protected:
   gstring_stream& operator = (const gstring_stream &);
 };
 
+/// Parse and return a netstring at `pos`.\n
+/// Throws std::runtime_error if netstring parsing fails.\n
+/// If parsing was successfull, then `after` is set to point after the parsed netstring.
+std::string netstringAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr) {
+  const uint32_t len = source.size(); char* buf = (char*) source.data();
+  uint32_t next = pos;
+  while (next < len && buf[next] >= '0' && buf[next] <= '9') ++next;
+  if (next >= len || buf[next] != ':' || next - pos > 10) GTHROW ("netstringAt: no header");
+  char* endptr = 0;
+  long nlen = ::strtol (buf + pos, &endptr, 10);
+  if (endptr != buf + next) GTHROW ("netstringAt: unexpected header end");
+  pos = next + 1; next = pos + nlen;
+  if (next >= len || buf[next] != ',') GTHROW ("netstringAt: no body");
+  if (after) *after = next + 1;
+  return std::string ((const char*) buf + pos, next - pos);
+}
+
+/// Wrapper around strtol.
+long intAt (const std::string& source, uint32_t pos, uint32_t* after = nullptr, int base = 10) {
+  // BTW: http://www.kumobius.com/2013/08/c-string-to-int/
+  const uint32_t len = source.size(); char* buf = (char*) source.c_str();
+  if (pos >= len || buf == nullptr) GTHROW ("intAt: pos >= len");
+  char* endptr = 0;
+  long lv = ::strtol (buf + pos, &endptr, base);
+  uint32_t next = endptr - buf;
+  if (next > len) GTHROW ("intAt: endptr > len");
+  if (after) *after = next;
+  return lv;
+}
+
 } // namespace glim
 
 // hash specialization
