@@ -586,13 +586,15 @@ inline long intAt (const std::string& source, uint32_t pos, uint32_t* after = nu
 
 /// `string`-based alternative to `gstring`'s `appendNetstring`.
 inline void writeNetstring (std::ostringstream& oss, const char* cstr, uint32_t clen) {
-  oss << (int) clen; oss.put (':'); oss.write (cstr, clen); oss.put (',');
-}
+  oss << (int) clen; oss.put (':'); oss.write (cstr, clen); oss.put (',');}
 
 /// `string`-based alternative to `gstring`'s `appendNetstring`.
 inline void writeNetstring (std::ostringstream& oss, const std::string& payload) {
-  writeNetstring (oss, payload.data(), payload.size());
-}
+  writeNetstring (oss, payload.data(), payload.size());}
+
+/// `string`-based alternative to `gstring`'s `appendNetstring`.
+inline void writeNetstring (std::ostringstream& oss, const gstring& payload) {
+  writeNetstring (oss, payload.data(), payload.size());}
 
 } // namespace glim
 
