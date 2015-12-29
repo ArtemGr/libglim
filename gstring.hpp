@@ -373,7 +373,7 @@ public:
     ::memcpy ((char*) _buf + len, cstr, clen);
     length (need);
   }
-  /** This one is for http://code.google.com/p/re2/; `clear` then `append`. */
+  /** This one is for http://code.google.com/p/re2/ and http://www.pcre.org/original/doc/html/pcrecpp.html; `clear` then `append`. */
   bool ParseFrom (const char* cstr, int clen) {
     if (clen < 0 || clen > (int) LENGTH_MASK) return false;
     length (0); append (cstr, (uint32_t) clen); return true;}
