@@ -1,3 +1,6 @@
+#ifndef _GLIM_RAII_HPP_INCLUDED
+#define _GLIM_RAII_HPP_INCLUDED
+
 #include <functional>
 namespace glim {
 
@@ -32,3 +35,5 @@ template<typename Fun> RAIIFun<Fun> raiiFun (const Fun& fun) {return RAIIFun<Fun
 template<typename Fun> RAIIFun<Fun> raiiFun (Fun&& fun) {return RAIIFun<Fun> (std::move (fun));}
 
 }
+
+#endif // _GLIM_RAII_HPP_INCLUDED
